@@ -125,3 +125,18 @@ def test_input_guardrails():
     assert clean_input("   ")[1] == ["empty"]
     text, flags = clean_input("а" * 3500)
     assert "too_long" in flags and len(text) == 3000
+
+
+def test_followup_mode_rules_and_third_person():
+    llm = FakeLLM([{"question": "Как, по-вашему, TF и IDF объединяются в итоговый вес слова?"}])
+    assert make_followup(llm, Q, ["ответ"], ["пункт"]).startswith("Как, по-вашему")
+    assert "проверка знаний" in llm.requests[0][0]["content"]  # правила режима в системном промпте
+
+    llm = FakeLLM([{"question": "Расскажите про сроки?"}])
+    make_followup(llm, Q, ["ответ"], ["сроки"], reveal_topics=True)
+    assert "собеседование" in llm.requests[0][0]["content"]
+
+    third = {"question": "Упомянуто ли в ответе произведение TF и IDF?"}
+    assert make_followup(FakeLLM([third]), Q, ["ответ"], ["пункт"]) == fallback_text(
+        ["пункт"], reveal_topics=False
+    )

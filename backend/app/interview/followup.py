@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import re
+
 from pydantic import BaseModel
 
 from app.interview.guardrails import output_is_safe
@@ -14,11 +16,33 @@ from app.llm.base import LLMCall, LLMError, LLMProvider, complete_json
 from app.llm.prompts import load_prompt, render
 from app.schemas.scenario import Question
 
-PROMPT_VERSION = "v3"
+PROMPT_VERSION = "v4"
 MAX_WORDS = 40
 EXCERPT_CHARS = 400
 
 FALLBACK = "Можете дополнить ответ? Раскрыто ещё не всё, о чём спрашивает вопрос."
+
+# Правила для двух режимов (D-010): в проверке знаний нельзя называть недостающий факт —
+# это подсказка; в собеседовании «правильного ответа» нет, тему можно назвать прямо.
+MODE_RULES = {
+    "knowledge": (
+        "- Это проверка знаний. НЕ называй недостающий факт, термин или формулу — иначе ты подскажешь "
+        "ответ. Спроси, как человек понимает этот аспект темы.\n"
+        "  Плохо: «Упомянуто ли в ответе, что кросс-валидация делит данные на k частей?» — подсказка "
+        "и третье лицо.\n"
+        "  Плохо: «Вы знаете, что итоговая оценка — это произведение двух величин?» — подсказка.\n"
+        "  Хорошо: «Как именно при кросс-валидации данные используются для обучения и проверки?»"
+    ),
+    "interview": (
+        "- Это собеседование: можно прямо назвать, о чём рассказать подробнее "
+        "(сроки, роль, инструменты, результат).\n"
+        "  Плохо: «Упомянуто ли в ответе, какую роль вы играли в проекте?» — третье лицо.\n"
+        "  Хорошо: «Расскажите, пожалуйста, что в этом проекте вы делали лично и каким был результат?»"
+    ),
+}
+
+# Реплика о человеке в третьем лице вместо вопроса к нему.
+_THIRD_PERSON = re.compile(r"^\s*(упомянут\w*|указан\w*|есть ли в ответе|в ответе)", re.IGNORECASE)
 
 
 def fallback_text(missing: list[str], *, reveal_topics: bool) -> str:
@@ -55,7 +79,10 @@ def make_followup(
         answer_excerpt=excerpt or "—",
         missing="\n".join(f"- {m}" for m in missing),
     )
-    messages = [{"role": "system", "content": prompt.system}, {"role": "user", "content": user}]
+    system = render(
+        prompt.system, mode_rules=MODE_RULES["interview" if reveal_topics else "knowledge"]
+    )
+    messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
     fallback = fallback_text(missing, reveal_topics=reveal_topics)
     try:
         text = complete_json(
@@ -68,7 +95,7 @@ def make_followup(
         ).question.strip()
     except LLMError:
         return fallback
-    if len(text.split()) > MAX_WORDS or "?" not in text:
+    if len(text.split()) > MAX_WORDS or "?" not in text or _THIRD_PERSON.match(text):
         return fallback
     if not output_is_safe(text, question.reference_answer, question.text):
         return fallback
