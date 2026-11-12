@@ -1,0 +1,32 @@
+# Проверки перед каждым коммитом. Один раз: pip install pre-commit && pre-commit install
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.9
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+      - id: check-json
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  - repo: local
+    hooks:
+      - id: validate-scenarios
+        name: validate scenarios
+        entry: python scripts/validate_scenarios.py
+        language: system
+        files: ^(scenarios/.*\.json|backend/app/schemas/scenario\.py)$
+        pass_filenames: false
+      - id: forbid-env
+        name: .env с секретами не коммитим
+        entry: .env нельзя коммитить
+        language: fail
+        files: (^|/)\.env$

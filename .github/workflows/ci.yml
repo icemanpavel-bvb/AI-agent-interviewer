@@ -1,0 +1,36 @@
+# Автопроверки на каждый push в main и на каждый Pull Request.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    name: backend (lint, tests, scenarios)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install
+        run: pip install "ruff==0.16.9" "pydantic>=2" "pydantic-settings" pytest
+
+      - name: Lint (ruff)
+        run: ruff check backend scripts eval
+
+      - name: Format (ruff format)
+        run: ruff format --check backend scripts eval
+
+      - name: Validate scenarios
+        run: python scripts/validate_scenarios.py
+
+      - name: Unit tests
+        working-directory: backend
+        run: pytest -q
