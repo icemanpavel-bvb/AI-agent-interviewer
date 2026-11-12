@@ -140,3 +140,19 @@ def test_followup_mode_rules_and_third_person():
     assert make_followup(FakeLLM([third]), Q, ["ответ"], ["пункт"]) == fallback_text(
         ["пункт"], reveal_topics=False
     )
+
+
+def test_long_answer_is_never_a_question_and_quote_is_capped():
+    from app.interview.analyzer import MAX_QUOTE_CHARS, AnalyzerOutput
+
+    schema = AnalyzerOutput.model_json_schema()
+    assert "maxLength" in str(schema)
+    long_answer = "### Как обучается модель? " + "слово " * 60
+    llm = FakeLLM([{"intent": "question", "probes": []}])
+    assert analyze_answer(llm, Q, [long_answer]).intent == "answer"
+    llm = FakeLLM([{"intent": "question", "probes": []}])
+    assert analyze_answer(llm, Q, ["А какая зарплата?"]).intent == "question"
+    j = AnalyzerOutput.model_validate(
+        {"intent": "answer", "probes": [{"id": "p1", "status": "covered", "quote": "а" * 500}]}
+    )
+    assert len(j.probes[0].quote) == MAX_QUOTE_CHARS

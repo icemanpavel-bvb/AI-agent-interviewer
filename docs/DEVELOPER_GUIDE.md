@@ -24,7 +24,7 @@
 3. Прочитать в таком порядке:
    - [`scenarios/README.md`](../scenarios/README.md) и любой сценарий, например `scenarios/ml_junior.json` — **что** спрашивает агент;
    - `backend/app/interview/runner.py` — **как** идёт диалог (главный файл);
-   - `backend/app/interview/analyzer.py` и промпт `backend/app/interview/prompts/analyze_answer.v3.md` — как проверяется ответ;
+   - `backend/app/interview/analyzer.py` и промпт `backend/app/interview/prompts/analyze_answer.v4.md` — как проверяется ответ;
    - `backend/app/reporting/protocol.py` — что получается на выходе.
 4. Посмотреть тесты `backend/tests/unit/test_runner.py` — они читаются как спецификация поведения.
 
@@ -60,7 +60,7 @@
 | Кабинет рекрутера, экран согласия по ссылке | 🧩 | `frontend/src/recruiter/`, `candidate/ConsentScreen.tsx` |
 | Оценка качества (eval) | 🧩 | `eval/` |
 
-Рабочие промпты — `analyze_answer.v3.md` и `followup.v4.md`. Предыдущие версии оставлены для сравнения в eval; в коде не используются.
+Рабочие промпты — `analyze_answer.v4.md` и `followup.v4.md`. Предыдущие версии оставлены для сравнения в eval; в коде не используются.
 
 В `followup.v4.md` есть плейсхолдер `{{mode_rules}}`: `followup.py` подставляет правила из `MODE_RULES` в зависимости от режима (D-010). В проверке знаний (`knowledge_check`) уточнение не должно называть недостающий факт — иначе это подсказка; в собеседовании тему можно назвать прямо. Код дополнительно отбрасывает уточнение, если оно длиннее 40 слов, без вопросительного знака, написано в третьем лице («Упомянуто ли в ответе…», регулярка `_THIRD_PERSON`) или повторяет эталон (`output_is_safe`) — тогда кандидат видит нейтральную заготовку.
 
@@ -293,7 +293,7 @@ python -m app.cli [сценарий] [--list] [--topic T03] [--size 5] [--seed 4
 Пункты проверки (`probes`) — главное в сценарии: 3–4 на вопрос, каждый — одна конкретная вещь, которую можно найти в тексте. «Понимает ML» — плохой пункт; «называет схему разбиения: train/validation/test или кросс-валидация» — хороший.
 
 ### Изменить промпт
-1. Скопировать `analyze_answer.v3.md` в `analyze_answer.v4.md`, внести правки.
+1. Скопировать `analyze_answer.v4.md` в `analyze_answer.v5.md`, внести правки.
 2. В `analyzer.py` поменять `PROMPT_VERSION = "v4"`.
 3. Прогнать тесты и 2–3 сессии в консоли, сравнить протоколы со старой версией.
 

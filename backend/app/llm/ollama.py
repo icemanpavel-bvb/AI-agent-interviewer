@@ -22,7 +22,7 @@ class OllamaProvider:
         *,
         temperature: float = 0.0,
         num_ctx: int = 4096,
-        num_predict: int = 400,
+        num_predict: int = 600,
         keep_alive: str = "30m",
         timeout: float = 180.0,
     ) -> None:

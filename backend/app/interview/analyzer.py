@@ -11,19 +11,24 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from app.llm.base import LLMCall, LLMError, LLMProvider, LLMUnavailable, complete_json
 from app.llm.prompts import load_prompt, render
 from app.reporting.validators import best_fragment, quote_match
 from app.schemas.scenario import Question
 
-PROMPT_VERSION = "v3"
+PROMPT_VERSION = "v4"
 # Сколько символов ответов на один вопрос уходит в модель: контекст 4096 токенов,
 # из них ~1800 занимают служебный блок, инструкция, вопрос и пункты, ~400 — ответ модели.
 MAX_ANSWER_CHARS_FOR_MODEL = 5000
+# Длина цитаты: ограничение уходит в JSON-схему (Ollama не даст модели написать длиннее),
+# иначе модель копирует абзацы целиком и упирается в num_predict — JSON обрывается (D-011).
+MAX_QUOTE_CHARS = 160
+# Сообщение длиннее стольких слов — развёрнутый ответ, а не вопрос/просьба пояснить (D-011).
+LONG_ANSWER_WORDS = 40
 
 Intent = Literal["answer", "clarify", "dont_know", "question", "off_topic", "stop"]
 Status = Literal["covered", "partial", "missing"]
@@ -35,7 +40,13 @@ _RANK = {"missing": 0, "partial": 1, "covered": 2}
 class ProbeJudgement(BaseModel):
     id: str
     status: Status
-    quote: str | None = None
+    # maxLength уходит в JSON-схему на ветку string; длинное (если схема не сработала) — обрезаем.
+    quote: Annotated[str, Field(max_length=MAX_QUOTE_CHARS)] | None = None
+
+    @field_validator("quote", mode="before")
+    @classmethod
+    def _trim(cls, v: object) -> object:
+        return v[:MAX_QUOTE_CHARS] if isinstance(v, str) else v
 
 
 class AnalyzerOutput(BaseModel):
@@ -127,6 +138,10 @@ def analyze_answer(
         probes = [ProbeResult(p.id, p.text) for p in question.probes]
         return Analysis("answer", probes, "complete", llm_failed=True, notes=[str(e)])
 
+    intent = out.intent
+    if intent != "answer" and answers and len(answers[-1].split()) >= LONG_ANSWER_WORDS:
+        intent = "answer"  # длинный текст по теме модель иногда принимает за вопрос
+
     by_id = {j.id: j for j in out.probes}
     results: list[ProbeResult] = []
     for probe in question.probes:
@@ -134,7 +149,7 @@ def analyze_answer(
         result = ProbeResult(probe.id, probe.text)
         if judgement:
             result.model_status, result.model_quote = judgement.status, judgement.quote
-        if judgement and judgement.status != "missing" and out.intent == "answer":
+        if judgement and judgement.status != "missing" and intent == "answer":
             check = quote_match(judgement.quote, answer_text) if judgement.quote else None
             if check:
                 result.status = judgement.status
@@ -147,4 +162,4 @@ def analyze_answer(
             else:
                 result.quote_check = "rejected"
         results.append(result)
-    return Analysis(out.intent, results, completeness_of(results))
+    return Analysis(intent, results, completeness_of(results))

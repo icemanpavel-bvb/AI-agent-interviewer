@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.0
     llm_num_ctx: int = 4096
     # Ответ анализа — JSON с цитатой по каждому пункту (до 6): 400 токенов с запасом.
-    llm_num_predict: int = 400
+    llm_num_predict: int = 600
     llm_warmup_on_start: bool = True
     gigachat_credentials: str = ""
     llm_mask_pii: bool = False

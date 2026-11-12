@@ -86,14 +86,15 @@ def complete_json(
             parsed = schema.model_validate_json(extract_json(result.text))
         except (ValidationError, ValueError, json.JSONDecodeError) as e:
             error = str(e)[:300]
-            attempt_messages = [
-                *messages,
-                {"role": "assistant", "content": result.text},
-                {
-                    "role": "user",
-                    "content": f"Ответ не соответствует схеме: {error}. Верни только корректный JSON.",
-                },
-            ]
+            # Испорченный ответ модели обратно не отправляем: он съедает контекст (4096 токенов),
+            # а обрезанный JSON модель всё равно не допишет. Просим ответить заново и короче.
+            truncated = "{" in result.text and not result.text.rstrip().endswith("}")
+            hint = (
+                "Предыдущий ответ оборвался. Ответь заново, цитаты делай короче."
+                if truncated
+                else f"Ответ не соответствует схеме: {error}. Верни только корректный JSON."
+            )
+            attempt_messages = [*messages, {"role": "user", "content": hint}]
             continue
         _log(
             log,

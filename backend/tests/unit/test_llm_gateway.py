@@ -41,3 +41,14 @@ def test_prompts_load_and_render():
     assert p.system and "{{answer}}" in p.user
     assert "Привет" in render("{{a}} {b}", a="Привет")
     assert render("{{a}} {b}", a="x").endswith("{b}")
+
+
+def test_retry_does_not_resend_broken_output():
+    llm = FakeLLM(['{"value": 1, "oborvalos', {"value": 2}])
+    out = complete_json(
+        llm, [{"role": "user", "content": "x"}], Out, purpose="t", prompt_version="t"
+    )
+    assert out.value == 2
+    retry = llm.requests[1]
+    assert all(m["role"] != "assistant" for m in retry)
+    assert "оборвался" in retry[-1]["content"]
