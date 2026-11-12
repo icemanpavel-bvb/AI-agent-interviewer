@@ -2,8 +2,9 @@
 
 Модель для каждого пункта говорит covered / partial / missing и даёт цитату.
 Дальше всё решает код: цитата сверяется с ответом (не нашлась — пункт missing),
-полнота считается по пунктам. Если модель не ответила — ответ считается полным,
-интервью идёт дальше, а вопрос помечается для ручной проверки.
+полнота считается по пунктам. Если модель вернула мусор — ответ считается полным,
+интервью идёт дальше, а вопрос помечается для ручной проверки. Если модель
+недоступна (LLMUnavailable) — исключение пробрасывается: ход не засчитывается.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from app.llm.base import LLMCall, LLMError, LLMProvider, complete_json
+from app.llm.base import LLMCall, LLMError, LLMProvider, LLMUnavailable, complete_json
 from app.llm.prompts import load_prompt, render
 from app.reporting.validators import quote_is_grounded
 from app.schemas.scenario import Question
@@ -101,6 +102,8 @@ def analyze_answer(
             prompt_version=prompt.tag,
             log=log,
         )
+    except LLMUnavailable:
+        raise  # модель недоступна: ход не засчитываем, его нужно повторить
     except LLMError as e:
         probes = [ProbeResult(p.id, p.text) for p in question.probes]
         return Analysis("answer", probes, "complete", llm_failed=True, notes=[str(e)])

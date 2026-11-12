@@ -120,12 +120,13 @@ class InterviewRunner:
         cleaned, flags = clean_input(text)
         if "empty" in flags:
             return self._reply("Похоже, сообщение пустое. " + self._question_line(state))
-        state.flags.extend(f for f in flags if f not in state.flags)
-        self.transcript.append(Turn("candidate", "answer", cleaned, state.question.id))
-
+        # Сначала анализ: если модель недоступна (LLMUnavailable), состояние не меняется
+        # и тот же ответ можно отправить ещё раз.
         analysis = analyze_answer(
             self.provider, state.question, [*state.answers, cleaned], log=self.llm_log
         )
+        state.flags.extend(f for f in flags if f not in state.flags)
+        self.transcript.append(Turn("candidate", "answer", cleaned, state.question.id))
 
         if analysis.intent == "stop":
             state.ended_by = "stopped"

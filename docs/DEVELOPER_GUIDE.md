@@ -47,15 +47,17 @@
 | Работа с моделью | ✅ | `backend/app/llm/base.py`, `ollama.py`, `fake.py`, `prompts.py` |
 | Протокол и проверки кодом | ✅ | `backend/app/reporting/protocol.py`, `validators.py` |
 | Консольный прототип | ✅ | `backend/app/cli/__main__.py` |
+| API демо и чата (сессии в памяти) | ✅ | `backend/app/api/v1/demo.py`, `interview.py`, `backend/app/interview/store.py`, `backend/app/main.py` |
+| Веб-интерфейс: /demo, чат, отладка, протокол | ✅ | `frontend/src/demo/`, `candidate/ChatPage.tsx`, `components/` |
 | Переходы статусов кандидата | ✅ (только таблица и проверка) | `backend/app/services/application_service.py` |
 | База данных, модели, миграции | 🧩 | `backend/app/db/`, `backend/app/models/`, `backend/migrations/` |
-| HTTP API | 🧩 | `backend/app/api/`, `backend/app/main.py` |
+| Остальное HTTP API (рекрутер, вакансии, отчёты, вход) | 🧩 | `backend/app/api/v1/auth.py`, `vacancies.py`, `applications.py`, `reports.py` |
 | Interview Engine с сохранением в БД | 🧩 | `backend/app/interview/engine.py` (будет обёрткой над `runner.py`) |
 | Ответы на вопросы кандидата о вакансии | 🧩 | `backend/app/interview/candidate_qa.py` |
 | PDF, отчёт для рекрутера, версии | 🧩 | `backend/app/reporting/builder.py`, `pdf.py` |
 | GigaChat API, маскирование ПДн | 🧩 | `backend/app/llm/gigachat.py`, `pii.py` |
 | Уведомления, планировщик | 🧩 | `backend/app/notifications/`, `backend/app/jobs/` |
-| Веб-интерфейс | 🧩 | `frontend/` |
+| Кабинет рекрутера, экран согласия по ссылке | 🧩 | `frontend/src/recruiter/`, `candidate/ConsentScreen.tsx` |
 | Оценка качества (eval) | 🧩 | `eval/` |
 
 Промпты `*.v1.md` в `backend/app/interview/prompts/` — старые черновики, в коде не используются. Рабочие — `analyze_answer.v2.md` и `followup.v2.md`.
@@ -221,7 +223,46 @@ Pydantic-схема JSON-файла из `scenarios/`. Формат описан
 
 Статус критерия: все пункты `covered` → `covered`; что-то раскрыто → `partial`; ничего → `missing`; критерий с `requires_practice` → всегда `unknown`.
 
-### 4.9. Консольный прототип — `backend/app/cli/__main__.py`
+### 4.9. API демо и чата — `backend/app/api/v1/`, `backend/app/interview/store.py`
+
+Бэкенд — тот же `InterviewRunner`, обёрнутый в HTTP. Сессии лежат в `SessionStore` в памяти процесса (D-008): токен → runner. На этапе 2 хранилище заменится БД, контракт API останется.
+
+| Метод | Путь | Что делает |
+|---|---|---|
+| GET | `/api/v1/demo/health` | Доступна ли Ollama и скачана ли модель (`OllamaProvider.ping`) |
+| GET | `/api/v1/demo/scenarios` | Карточки сценариев: тип, уровень, сколько вопросов в сессии, темы |
+| POST | `/api/v1/demo/start` | `{scenario_id, topic?, size?, seed?}` → новая сессия (201) |
+| GET | `/api/v1/interview/{token}` | Состояние: сообщения, прогресс, `debug` по последнему ответу |
+| POST | `/api/v1/interview/{token}/messages` | `{text}` → ход; 409 — предыдущий ещё обрабатывается или сессия закончена; **503 — модель недоступна, ответ не засчитан** |
+| POST | `/api/v1/interview/{token}/stop` | Досрочно завершить |
+| GET | `/api/v1/interview/{token}/protocol` | Протокол (`build_protocol`); для проверки знаний + `references` — эталоны |
+
+- `/demo/*` работают только при `DEMO_MODE=true`, иначе 404.
+- Эндпоинты синхронные (`def`): вызов модели блокирующий, FastAPI выполняет их в пуле потоков. В сессии одновременно обрабатывается один ход (блокировка в `SessionEntry`).
+- Модель создаётся один раз при старте (`main.py`, `app.state.provider`) и при `DEMO_MODE` прогревается в фоне.
+- Если Ollama недоступна, провайдер бросает `LLMUnavailable`; анализ его не глотает, а `runner.handle` не меняет состояние до успешного анализа — тот же ответ можно отправить ещё раз.
+- Swagger со всеми эндпоинтами: http://localhost:8000/docs.
+
+### 4.10. Веб-интерфейс — `frontend/`
+
+React 18 + TypeScript + Vite, без UI-библиотек и менеджеров состояния.
+
+| Файл | Что делает |
+|---|---|
+| `vite.config.ts` | Порт 5173, прокси `/api` → `localhost:8000` |
+| `src/main.tsx` | Маршруты: `/demo`, `/i/:token` |
+| `src/api/client.ts` | Все запросы к API, `ApiError` с понятным текстом |
+| `src/types.ts` | Типы ответов API (повторяют `schemas/interview.py` и протокол) |
+| `src/labels.ts` | Русские подписи статусов, склонение «вопрос/вопроса/вопросов» |
+| `src/demo/DemoPage.tsx` | Статус модели, карточки сценариев, выбор темы, согласие для собеседований, старт |
+| `src/candidate/ChatPage.tsx` | Чат: сообщения, ввод (Enter / Shift+Enter), индикатор ожидания с секундами, «Завершить», «Отладка» (запоминается в браузере), протокол в конце |
+| `src/components/DebugPanel.tsx` | Разбор последнего ответа: пункты ✓ ~ ✗ с цитатами, время вызовов модели |
+| `src/components/ProtocolView.tsx` | Протокол: критерии/темы, ответы по вопросам, эталоны, «Скачать JSON» |
+| `src/styles.css` | Все стили; светлая и тёмная тема по настройке системы |
+
+Если API меняется — обновите `src/types.ts`, иначе `npm run build` упадёт на проверке типов (это и хорошо).
+
+### 4.11. Консольный прототип — `backend/app/cli/__main__.py`
 
 ```
 python -m app.cli [сценарий] [--list] [--topic T03] [--size 5] [--seed 42]
@@ -276,6 +317,7 @@ python -c "import json,sys; p=json.load(open(sys.argv[1])); print(json.dumps(p['
 
 ```bash
 cd backend && pytest                       # все тесты (~1 с, модель не нужна)
+cd frontend && npm run build               # проверка типов TypeScript и сборка
 python scripts/validate_scenarios.py       # сценарии (из корня репозитория)
 ruff check backend scripts eval            # линтер
 ruff format backend scripts eval           # форматирование
@@ -288,6 +330,7 @@ ruff format backend scripts eval           # форматирование
 | `test_llm_gateway.py` | JSON-ответы: повтор при ошибке, отказ после повторов, журнал, промпты |
 | `test_analyzer.py` | Сверка цитат, допуск мелких отличий, сбой модели, уточнение без подсказки, защита входа |
 | `test_runner.py` | Диалог целиком: уточнение, лимит, «не знаю», уход от темы, стоп, протокол |
+| `test_api.py` | API на фейковой модели: старт, ход, 503 при недоступной модели без потери состояния, протокол, ошибки, выключенный демо-режим. Пропускается, если не установлены `fastapi` и `httpx` |
 | `test_policy.py`, `test_status_transitions.py`, `test_report_validators.py` | Правила диалога, статусы кандидата, стоп-лист |
 
 **CI** (`.github/workflows/ci.yml`) запускает то же самое на каждый Pull Request. Красный CI — PR не сливается.
@@ -321,3 +364,7 @@ ruff format backend scripts eval           # форматирование
 | Каждый ответ медленный (> 15 с) | Модель выгрузилась или в памяти две модели. `ollama ps` — что загружено; закрыть лишнее |
 | Много «⚠ проверить вручную» в протоколе | Модель не смогла вернуть корректный JSON. Посмотрите `llm.invalid_json` в протоколе и запустите с `--verbose` |
 | `datetime.UTC` / синтаксические ошибки | Нужен Python 3.11 или новее: `python3 --version` |
+| На /demo «Бэкенд не отвечает» | Не запущен uvicorn в терминале 1, или он упал — смотрите его вывод |
+| На /demo пусто, в консоли 404 на `/api/v1/demo/...` | Бэкенд запущен без `DEMO_MODE=true` |
+| В чате «Модель недоступна, ответ не засчитан» | Ollama остановилась или модель выгрузилась с ошибкой: `ollama ps`, `sudo systemctl restart ollama`; затем отправить ответ ещё раз |
+| `npm: command not found` | `sudo apt install nodejs npm` (нужен Node.js 18+: `node -v`) |

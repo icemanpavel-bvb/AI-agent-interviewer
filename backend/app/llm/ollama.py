@@ -11,7 +11,7 @@ import os
 import urllib.error
 import urllib.request
 
-from app.llm.base import ChatResult, LLMError
+from app.llm.base import ChatResult, LLMUnavailable
 
 
 class OllamaProvider:
@@ -22,7 +22,7 @@ class OllamaProvider:
         *,
         temperature: float = 0.0,
         num_ctx: int = 4096,
-        num_predict: int = 300,
+        num_predict: int = 400,
         keep_alive: str = "30m",
         timeout: float = 180.0,
     ) -> None:
@@ -58,14 +58,25 @@ class OllamaProvider:
                 data = json.loads(response.read())
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", "replace")[:300]
-            raise LLMError(f"Ollama вернула ошибку {e.code}: {detail}") from e
-        except (urllib.error.URLError, TimeoutError) as e:
-            raise LLMError(f"Ollama недоступна по адресу {self.url}: {e}") from e
+            raise LLMUnavailable(f"Ollama вернула ошибку {e.code}: {detail}") from e
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+            raise LLMUnavailable(f"Ollama недоступна по адресу {self.url}: {e}") from e
         return ChatResult(
             text=data.get("message", {}).get("content", ""),
             prompt_tokens=data.get("prompt_eval_count"),
             output_tokens=data.get("eval_count"),
         )
+
+    def ping(self) -> tuple[bool, str]:
+        """Быстрая проверка без генерации: Ollama отвечает и модель скачана."""
+        try:
+            with urllib.request.urlopen(f"{self.url}/api/tags", timeout=3) as response:
+                names = {m.get("name", "") for m in json.loads(response.read()).get("models", [])}
+        except (urllib.error.URLError, TimeoutError, ConnectionError, ValueError) as e:
+            return False, f"Ollama недоступна по адресу {self.url}: {e}"
+        if self.model not in names and f"{self.model}:latest" not in names:
+            return False, f"Модель {self.model} не найдена в Ollama (ollama list)"
+        return True, "ok"
 
     def warmup(self) -> None:
         """Прогрев: загружает модель и кэширует служебный блок шаблона (~30 с при холодном старте)."""

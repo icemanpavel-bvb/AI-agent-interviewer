@@ -21,7 +21,7 @@ from datetime import datetime
 from pathlib import Path
 
 from app.interview.runner import InterviewRunner
-from app.llm.base import LLMError
+from app.llm.base import LLMError, LLMUnavailable
 from app.llm.ollama import OllamaProvider
 from app.reporting.protocol import build_protocol
 from app.scenarios import DEFAULT_DIR, list_scenarios, load_scenario
@@ -67,7 +67,13 @@ def main(argv: list[str] | None = None) -> int:
             break
         calls_before = len(runner.llm_log)
         t0 = time.monotonic()
-        reply = runner.handle(text)
+        try:
+            reply = runner.handle(text)
+        except LLMUnavailable as e:
+            print(
+                f"\n{DIM}Модель недоступна: {e}\nОтвет не засчитан — проверьте Ollama и отправьте его ещё раз.{RESET}"
+            )
+            continue
         if args.verbose:
             calls = runner.llm_log[calls_before:]
             detail = ", ".join(

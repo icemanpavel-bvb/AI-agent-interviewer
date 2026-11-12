@@ -1,8 +1,23 @@
 // Точка входа SPA. Маршруты:
-//   /demo                     — демо: выбор сценария и старт интервью (только при DEMO_MODE)
-//   /i/:token                 — чат кандидата (без авторизации, доступ по токену)
-//   /app/login                — вход рекрутера
-//   /app/vacancies            — вакансии и сценарии вопросов
-//   /app/applications         — кандидаты (фильтр по статусу, «Отложенные»)
-//   /app/applications/:id     — отчёт, правка, решение
-export {};
+//   /demo        — выбор сценария и старт (демо-режим, DEMO_MODE=true на бэкенде)
+//   /i/:token    — чат интервью и протокол в конце
+//   /app/*       — кабинет рекрутера (в разработке)
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+
+import ChatPage from "./candidate/ChatPage";
+import DemoPage from "./demo/DemoPage";
+import "./styles.css";
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/demo" element={<DemoPage />} />
+        <Route path="/i/:token" element={<ChatPage />} />
+        <Route path="*" element={<Navigate to="/demo" replace />} />
+      </Routes>
+    </BrowserRouter>
+  </StrictMode>,
+);

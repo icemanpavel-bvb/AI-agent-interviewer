@@ -17,7 +17,11 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class LLMError(RuntimeError):
-    """Модель недоступна или так и не вернула корректный ответ."""
+    """Модель так и не вернула корректный ответ."""
+
+
+class LLMUnavailable(LLMError):
+    """Модель недоступна (Ollama не запущена, нет модели, таймаут): ход нужно повторить позже."""
 
 
 @dataclass
