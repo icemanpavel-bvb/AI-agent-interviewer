@@ -1,0 +1,25 @@
+flowchart TB
+    S((старт)) --> CONSENT["AWAIT_CONSENT<br/>согласие на обработку ПДн"]
+    CONSENT -- "нет" --> DECL["DECLINED<br/>сессия закрыта"]
+    CONSENT -- "да" --> ASK["ASK_BASE<br/>задать базовый вопрос i<br/>(текст из сценария, без LLM)"]
+    ASK --> WAIT["AWAIT_ANSWER"]
+
+    WAIT -. "ушёл" .-> PAUSE["PAUSED<br/>прогресс сохранён"]
+    PAUSE -. "вернулся" .-> WAIT
+
+    WAIT -- "сообщение" --> CLS{"Что это?<br/>(LLM: intent)"}
+    CLS -- "вопрос о вакансии" --> ORG["ANSWER_CANDIDATE<br/>ответ по описанию вакансии<br/>+ повтор текущего вопроса"]
+    ORG --> WAIT
+    CLS -- "ответ" --> AN["ANALYZE<br/>LLM: полнота ответа<br/>относительно критериев"]
+
+    AN --> POL{"Policy (код):<br/>неполный И уточнений &lt; 2?"}
+    POL -- "да" --> FU["ASK_FOLLOWUP<br/>LLM генерирует уточнение"]
+    FU --> WAIT
+    POL -- "нет" --> NEXT{"i &lt; N ?"}
+    NEXT -- "да, i = i + 1" --> ASK
+    NEXT -- "нет" --> FIN["FINALIZE<br/>ссылка деактивирована,<br/>запуск построения отчёта"]
+
+    classDef llm fill:#efe7ff,stroke:#7c5cd6;
+    classDef code fill:#e6f4ea,stroke:#3c8d53;
+    class CLS,AN,FU,ORG llm;
+    class POL,NEXT code;

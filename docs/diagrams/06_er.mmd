@@ -1,0 +1,25 @@
+erDiagram
+    RECRUITER ||--o{ VACANCY : "ведёт"
+    VACANCY ||--|{ QUESTION : "сценарий (до 10)"
+    CANDIDATE ||--o{ APPLICATION : "откликается"
+    VACANCY ||--o{ APPLICATION : "получает"
+    APPLICATION ||--o| INTERVIEW_SESSION : "AI-скрининг"
+    INTERVIEW_SESSION ||--o{ MESSAGE : "диалог"
+    QUESTION ||--o{ MESSAGE : "к какому вопросу"
+    APPLICATION ||--o{ REPORT_VERSION : "отчёт v1..vN"
+    APPLICATION ||--o{ DECISION : "решения"
+    APPLICATION ||--o{ AUDIT_EVENT : "история"
+    INTERVIEW_SESSION ||--o{ LLM_CALL : "журнал вызовов"
+    MESSAGE ||--o| ANSWER_ANALYSIS : "проверка ответа"
+
+    VACANCY { uuid id string title text description jsonb criteria_catalog string scenario_version string status }
+    QUESTION { uuid id int position text text text reference_answer jsonb criteria jsonb probes int max_followups bool required }
+    CANDIDATE { uuid id string full_name string email string phone text resume }
+    APPLICATION { uuid id string status timestamptz postponed_until }
+    INTERVIEW_SESSION { uuid id string token_hash timestamptz expires_at timestamptz consent_at string consent_text_version string state int current_question int followups_used jsonb question_plan }
+    MESSAGE { bigint id string role string kind text content timestamptz created_at }
+    REPORT_VERSION { uuid id int version jsonb content string author string pdf_path }
+    DECISION { uuid id string action text comment uuid recruiter_id }
+    AUDIT_EVENT { bigint id string event jsonb payload uuid actor_id }
+    ANSWER_ANALYSIS { bigint id string intent jsonb probes string completeness string policy_decision string prompt_version }
+    LLM_CALL { bigint id string purpose string model string prompt_version int latency_ms bool valid_json }

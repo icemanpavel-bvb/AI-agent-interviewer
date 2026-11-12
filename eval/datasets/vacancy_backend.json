@@ -1,0 +1,8 @@
+{
+  "title": "Junior+ Backend (Python)",
+  "description": "Удалённо или гибрид, Екатеринбург. Стек: Python, FastAPI, PostgreSQL, Docker.",
+  "questions": [
+    {"text": "Расскажите о вашем опыте коммерческой разработки на Python.", "reference_answer": "1+ год, конкретные проекты, роль", "criteria": ["срок опыта", "проекты", "роль в команде"], "max_followups": 2, "required": true},
+    {"text": "С какими базами данных вы работали и какие задачи решали?", "reference_answer": "PostgreSQL, проектирование схем, индексы", "criteria": ["СУБД", "типы задач"], "max_followups": 2, "required": true}
+  ]
+}

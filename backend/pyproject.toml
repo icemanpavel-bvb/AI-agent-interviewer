@@ -1,0 +1,23 @@
+[project]
+name = "ai-interviewer"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115", "uvicorn[standard]", "pydantic>=2", "pydantic-settings",
+  "sqlalchemy>=2", "asyncpg", "alembic", "httpx", "python-jose[cryptography]",
+  "passlib[bcrypt]", "apscheduler>=3.10", "jinja2", "weasyprint", "aiosmtplib",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio", "ruff==0.16.9", "mypy"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

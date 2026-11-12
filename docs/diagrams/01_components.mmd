@@ -1,0 +1,59 @@
+flowchart TB
+    C([Кандидат])
+    R([Рекрутер])
+    CUI["Чат кандидата<br/>React SPA · /i/:token"]
+    RUI["Кабинет рекрутера<br/>React SPA · /app"]
+    C --> CUI
+    R --> RUI
+
+    API["REST API · FastAPI<br/>аутентификация, валидация, rate-limit"]
+    CUI --> API
+    RUI --> API
+
+    subgraph BACK["Backend (один Python-сервис, модульный монолит)"]
+        VS["Vacancy & Script<br/>вопросы, эталоны, критерии"]
+        INV["Invitation<br/>токен ссылки, срок жизни"]
+        ENG["Interview Engine<br/>конечный автомат диалога"]
+        GR["Guardrails<br/>вход / выход LLM"]
+        RB["Report Builder<br/>протокол + проверка цитат"]
+        PDF["PDF Renderer"]
+        APP["Application<br/>статусы, решения, аудит"]
+        NS["Notifications"]
+        SCH["Scheduler<br/>«Отложен» 1–2 дня,<br/>истечение ссылок"]
+        LLMG["LLM Gateway<br/>единый интерфейс,<br/>JSON-режим, ретраи, журнал"]
+    end
+
+    API --> VS
+    API --> INV
+    API --> APP
+    API --> ENG
+    ENG --> GR
+    ENG --> LLMG
+    ENG -- "диалог завершён" --> RB
+    RB --> LLMG
+    RB --> PDF
+    RB -- "REPORT_READY" --> APP
+    APP --> NS
+    SCH --> APP
+    SCH --> INV
+
+    PG[("PostgreSQL<br/>сервер в РФ · 152-ФЗ")]
+    FS[("Хранилище PDF")]
+    LLM[["LLM<br/>Ollama локально (по умолчанию)<br/>или GigaChat / YandexGPT"]]
+    EXT[["Email (SMTP) / Telegram-бот"]]
+
+    VS --> PG
+    INV --> PG
+    ENG --> PG
+    APP --> PG
+    RB --> PG
+    PDF --> FS
+    LLMG --> LLM
+    NS --> EXT
+
+    classDef ai fill:#efe7ff,stroke:#7c5cd6;
+    classDef ext fill:#fff4e0,stroke:#d69a2d;
+    classDef store fill:#e6f4ea,stroke:#3c8d53;
+    class ENG,GR,RB,LLMG ai;
+    class LLM,EXT ext;
+    class PG,FS store;

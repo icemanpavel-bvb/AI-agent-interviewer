@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: interviewer
+      POSTGRES_PASSWORD: interviewer
+      POSTGRES_DB: interviewer
+    volumes: [pgdata:/var/lib/postgresql/data]
+  # Ollama запускается в системе, не в Docker (D-001): так проще держать модель в памяти и не дублировать 6,5 ГБ.
+  # На сервере с GPU можно вернуть контейнер: image ollama/ollama + deploy.resources.reservations.devices (nvidia).
+  backend:
+    build: ./backend
+    env_file: .env
+    depends_on: [db]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    volumes: [./storage:/app/storage]
+  frontend:
+    build: ./frontend
+    ports: ["8080:80"]
+    depends_on: [backend]
+volumes:
+  pgdata: {}

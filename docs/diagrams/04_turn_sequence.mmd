@@ -1,0 +1,36 @@
+sequenceDiagram
+    autonumber
+    actor C as Кандидат
+    participant UI as Чат (SPA)
+    participant API as FastAPI
+    participant E as Interview Engine
+    participant G as Guardrails
+    participant L as LLM Gateway
+    participant DB as PostgreSQL
+
+    C->>UI: вводит ответ
+    UI->>API: POST /api/v1/interview/{token}/messages
+    API->>E: handle_turn(session, text)
+    E->>DB: загрузить сессию (блокировка строки)
+    E->>G: check_input(text)
+    G-->>E: ok / prompt-injection / не по теме
+    E->>DB: сохранить сообщение кандидата
+    E->>L: analyze_answer(вопрос, эталон, критерии, ответ)
+    L-->>E: JSON {intent, completeness, missing_points}
+    Note over E: решение принимает КОД (policy):<br/>уточнить / следующий / завершить
+    alt нужно уточнение (уточнений меньше 2)
+        E->>L: generate_followup(missing_points)
+        L-->>E: текст уточняющего вопроса
+        E->>G: check_output(текст)
+    else следующий базовый вопрос
+        Note over E: текст берётся из сценария вакансии без LLM
+    end
+    E->>DB: сохранить реплику ассистента, состояние сессии
+    E-->>API: реплика + прогресс (i из N)
+    API-->>UI: 200 OK
+    UI-->>C: показывает вопрос
+
+    opt все вопросы заданы
+        E->>DB: статус сессии = FINISHED
+        E-)API: фоновая задача build_report(application_id)
+    end

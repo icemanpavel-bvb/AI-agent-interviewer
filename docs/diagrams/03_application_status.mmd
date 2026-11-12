@@ -1,0 +1,18 @@
+stateDiagram-v2
+    direction LR
+    [*] --> NEW: отклик на вакансию
+    NEW --> RESUME_REJECTED: рекрутер — не подходит по резюме
+    NEW --> INVITED: направлен на AI-скрининг, ссылка отправлена
+    INVITED --> IN_PROGRESS: согласие получено
+    INVITED --> CONSENT_DECLINED: согласия нет
+    INVITED --> EXPIRED: истёк срок ссылки
+    IN_PROGRESS --> EXPIRED: брошено дольше срока
+    IN_PROGRESS --> REPORT_READY: диалог завершён, отчёт готов
+    REPORT_READY --> UNDER_REVIEW: рекрутер открыл отчёт
+    UNDER_REVIEW --> POSTPONED: «Отложить»
+    POSTPONED --> UNDER_REVIEW: напоминание через 1–2 дня
+    UNDER_REVIEW --> APPROVED: «Пригласить на 2-й этап»
+    UNDER_REVIEW --> REJECTED: «Отклонить»
+    RESUME_REJECTED --> [*]
+    APPROVED --> [*]
+    REJECTED --> [*]

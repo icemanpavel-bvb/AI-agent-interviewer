@@ -1,0 +1,13 @@
+# Общие правила линтера для всего репозитория (backend, scripts, eval).
+line-length = 100
+target-version = "py311"
+
+[lint]
+select = ["E", "F", "I", "UP", "B", "RUF"]
+ignore = [
+  "E501",                        # длину строк держит форматтер; длинные русские docstring допустимы
+  "RUF001", "RUF002", "RUF003",  # кириллица и типографские символы в строках и комментариях — норма для проекта
+]
+
+[lint.isort]
+known-first-party = ["app"]

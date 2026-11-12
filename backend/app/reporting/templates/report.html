@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Протокол интервью</title></head>
+<body>
+  <h1>Протокол первичного интервью</h1>
+  <p>Вакансия: {{ vacancy }} · Кандидат: {{ candidate_name }} · Версия: {{ version }}</p>
+  <p><em>Документ содержит ответы кандидата, сопоставленные с критериями. Оценка и решение — за рекрутером.</em></p>
+  {% for item in items %}
+  <section>
+    <h2>{{ loop.index }}. {{ item.question }}</h2>
+    <p>{{ item.answer_summary }}</p>
+    <ul>{% for c in item.criteria_coverage %}<li>{{ c.criterion }} — {{ c.status }}{% for e in c.evidence %} «{{ e.quote }}»{% endfor %}</li>{% endfor %}</ul>
+  </section>
+  {% endfor %}
+</body></html>

@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+node_modules/
+dist/
+storage/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Материалы курса и заказчика — не в репозиторий (docs/decisions.md, D-007):
+# лекции — чужие материалы курса; гайд T06 содержит ключ практического кейса.
+лекции/
+T06_*.docx
