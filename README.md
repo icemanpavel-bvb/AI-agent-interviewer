@@ -56,6 +56,22 @@ docker compose exec backend alembic upgrade head
 # кабинет рекрутера: http://localhost:8080/app
 ```
 
+## Прототип интервью в терминале
+
+Работает без БД и веб-интерфейса, нужна только Ollama с моделью (см. `docs/decisions.md`, D-001).
+
+```bash
+cd backend
+pip install pydantic                       # больше ничего не нужно
+python -m app.cli --list                   # сценарии и темы
+python -m app.cli student_course           # 10 случайных вопросов по NLP — подготовка к экзамену
+python -m app.cli student_course --topic T03 --verbose   # тренировка по теме + время вызовов модели
+python -m app.cli ml_junior                # собеседование Junior ML-инженера
+```
+
+В конце — протокол: темы/критерии, пункты с цитатами, для проверки знаний — эталоны для повторения.
+Полный протокол сохраняется в `storage/cli_sessions/*.json` (в `.gitignore`).
+
 ## Разработка
 
 ```bash
