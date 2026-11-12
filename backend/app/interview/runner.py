@@ -12,19 +12,21 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from app.interview.analyzer import (
+    Analysis,
     ProbeResult,
     analyze_answer,
     completeness_of,
     merge_best,
 )
 from app.interview.followup import make_followup
-from app.interview.guardrails import clean_input
+from app.interview.guardrails import MAX_INPUT_CHARS, clean_input
 from app.interview.policy import NextStep, PolicyInput, decide
 from app.interview.question_plan import plan_questions
 from app.llm.base import LLMCall, LLMProvider
 from app.schemas.scenario import Question, Scenario
 
 MAX_OFF_TOPIC = 2  # после стольких ответов не по теме переходим к следующему вопросу
+MAX_CLARIFY = 2  # пояснений вопроса (не тратят лимит уточнений); дальше — просим ответить как есть
 
 
 def plural_questions(n: int) -> str:
@@ -38,7 +40,8 @@ def plural_questions(n: int) -> str:
 @dataclass
 class Turn:
     role: str  # assistant | candidate
-    kind: str  # greeting | base_question | followup | answer | redirect | closing
+    # greeting | base_question | followup | clarify | answer | redirect | notice | closing
+    kind: str
     text: str
     question_id: str | None = None
     at: str = field(default_factory=lambda: datetime.now(UTC).isoformat(timespec="seconds"))
@@ -50,6 +53,7 @@ class QuestionState:
     answers: list[str] = field(default_factory=list)
     followups: int = 0
     off_topic: int = 0
+    clarifications: int = 0
     probes: list[ProbeResult] = field(default_factory=list)
     completeness: str = "empty"
     ended_by: str = ""  # complete | followup_limit | dont_know | off_topic | stopped | llm_failed
@@ -91,6 +95,13 @@ class InterviewRunner:
         self.started_at = datetime.now(UTC).isoformat(timespec="seconds")
         self.finished_at: str | None = None
 
+    # ---------- сохранение (демо-сессии на диске) ----------
+
+    def __getstate__(self) -> dict:
+        state = self.__dict__.copy()
+        state["provider"] = None  # модель не сохраняем: при загрузке подставляется текущая
+        return state
+
     # ---------- публичный интерфейс ----------
 
     @property
@@ -127,11 +138,43 @@ class InterviewRunner:
         )
         state.flags.extend(f for f in flags if f not in state.flags)
         self.transcript.append(Turn("candidate", "answer", cleaned, state.question.id))
+        notice = ""
+        if "too_long" in flags:
+            notice = f"Ответ длиннее {MAX_INPUT_CHARS} символов — учтены первые {MAX_INPUT_CHARS}."
+            self._say("notice", notice, state.question.id)
+        reply = self._dispatch(state, cleaned, analysis)
+        if notice:
+            reply.text = f"{notice}\n\n{reply.text}"
+        return reply
+
+    def _dispatch(self, state: QuestionState, cleaned: str, analysis: Analysis) -> Reply:
 
         if analysis.intent == "stop":
             state.ended_by = "stopped"
             self.stopped = True
             return self._finish("Хорошо, завершаем. Спасибо за уделённое время!")
+
+        if analysis.intent == "clarify":
+            state.clarifications += 1
+            if state.clarifications > MAX_CLARIFY:
+                return self._reply(
+                    "Ответьте, пожалуйста, как вы понимаете вопрос — даже неполный ответ подойдёт. "
+                    + self._question_line(state),
+                    kind="redirect",
+                )
+            missing = [p.text for p in state.probes if p.status != "covered"] or [
+                p.text for p in state.question.probes
+            ]
+            text = make_followup(
+                self.provider,
+                state.question,
+                state.answers,
+                missing,
+                reveal_topics=self.scenario.kind == "job_interview",
+                log=self.llm_log,
+            )
+            self._say("clarify", text, state.question.id)
+            return self._reply(text, record=False)
 
         if analysis.intent in ("question", "off_topic"):
             state.off_topic += 1
@@ -174,7 +217,12 @@ class InterviewRunner:
         if step == NextStep.FOLLOWUP:
             missing = [p.text for p in state.probes if p.status != "covered"]
             text = make_followup(
-                self.provider, state.question, state.answers, missing, log=self.llm_log
+                self.provider,
+                state.question,
+                state.answers,
+                missing,
+                reveal_topics=self.scenario.kind == "job_interview",
+                log=self.llm_log,
             )
             state.followups += 1
             self._say("followup", text, state.question.id)

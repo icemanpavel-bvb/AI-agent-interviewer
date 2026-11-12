@@ -103,3 +103,28 @@ def test_errors(client, monkeypatch):
     assert client.get("/api/v1/interview/unknown").status_code == 404
     monkeypatch.setattr(settings, "demo_mode", False)
     assert client.get("/api/v1/demo/scenarios").status_code == 404
+
+
+def test_session_survives_restart(tmp_path):
+    """Сессия сохраняется на диск и поднимается новым хранилищем (как после перезапуска сервера)."""
+    from app.interview.runner import InterviewRunner
+    from app.scenarios import load_scenario
+
+    first = SessionStore(persist_dir=tmp_path)
+    runner = InterviewRunner(load_scenario("ml_junior"), FakeLLM())
+    runner.start()
+    entry = first.create(runner)
+
+    second = SessionStore(persist_dir=tmp_path)  # «новый процесс»
+    restored = second.get(entry.token)
+    assert restored is not None and restored.runner.provider is None
+    assert [t.kind for t in restored.runner.transcript] == ["greeting", "base_question"]
+    assert second.get("../../etc/passwd") is None  # токен проверяется перед обращением к диску
+
+
+def test_too_long_message_rejected(client):
+    token = client.post("/api/v1/demo/start", json={"scenario_id": "ml_junior"}).json()["token"]
+    assert (
+        client.post(f"/api/v1/interview/{token}/messages", json={"text": "а" * 3001}).status_code
+        == 422
+    )

@@ -221,3 +221,12 @@ select:focus, textarea:focus { outline: 2px solid var(--accent-soft); border-col
   .chat-head { padding: 10px 12px; }
   .composer-row { flex-direction: column; align-items: stretch; }
 }
+
+/* ---------- добавлено: пояснения, предупреждения, счётчик, вердикт модели ---------- */
+.kind-clarify { border-color: var(--ok); }
+.kind-clarify .bubble-label { color: var(--ok); }
+.kind-notice { background: var(--warn-soft); color: var(--warn); border-color: transparent; font-size: 0.9rem; }
+.counter { min-height: 1.2em; margin-top: 4px; font-size: 0.8rem; color: var(--muted); text-align: right; }
+.counter-over { color: var(--bad); font-weight: 600; }
+.verdict { margin-top: 0.3em; font-size: 0.78rem; color: var(--muted); }
+.verdict-bad { color: var(--bad); }

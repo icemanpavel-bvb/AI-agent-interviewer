@@ -1,6 +1,9 @@
 // Типы ответов API (backend/app/schemas/interview.py и reporting/protocol.py).
 
 export type Kind = "job_interview" | "knowledge_check";
+
+// Совпадает с MAX_INPUT_CHARS в backend/app/interview/guardrails.py и SendIn в API.
+export const MAX_ANSWER_CHARS = 3000;
 export type ProbeStatus = "covered" | "partial" | "missing";
 
 export interface Topic {
@@ -24,7 +27,15 @@ export interface ScenarioCard {
 
 export interface Message {
   role: "assistant" | "candidate";
-  kind: "greeting" | "base_question" | "followup" | "answer" | "redirect" | "closing";
+  kind:
+    | "greeting"
+    | "base_question"
+    | "followup"
+    | "clarify"
+    | "answer"
+    | "redirect"
+    | "notice"
+    | "closing";
   text: string;
   question_id: string | null;
   question_number: number | null;
@@ -36,6 +47,10 @@ export interface Probe {
   text: string;
   status: ProbeStatus;
   quote: string | null;
+  // Отладка: что сказала модель до проверки цитаты кодом.
+  model_status?: string | null;
+  model_quote?: string | null;
+  quote_check?: "exact" | "fuzzy" | "rejected" | "";
 }
 
 export interface LLMCallInfo {

@@ -44,7 +44,13 @@ def build_protocol(runner: InterviewRunner) -> dict:
                 "needs_manual_check": st.llm_failed,
                 "flags": st.flags,
                 "probes": [
-                    {"id": p.id, "text": p.text, "status": p.status, "quote": p.quote}
+                    {
+                        "id": p.id,
+                        "text": p.text,
+                        "status": p.status,
+                        "quote": p.quote,
+                        "quote_check": p.quote_check,
+                    }
                     for p in st.probes
                 ],
             }

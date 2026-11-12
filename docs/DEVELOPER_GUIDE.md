@@ -24,7 +24,7 @@
 3. Прочитать в таком порядке:
    - [`scenarios/README.md`](../scenarios/README.md) и любой сценарий, например `scenarios/ml_junior.json` — **что** спрашивает агент;
    - `backend/app/interview/runner.py` — **как** идёт диалог (главный файл);
-   - `backend/app/interview/analyzer.py` и промпт `backend/app/interview/prompts/analyze_answer.v2.md` — как проверяется ответ;
+   - `backend/app/interview/analyzer.py` и промпт `backend/app/interview/prompts/analyze_answer.v3.md` — как проверяется ответ;
    - `backend/app/reporting/protocol.py` — что получается на выходе.
 4. Посмотреть тесты `backend/tests/unit/test_runner.py` — они читаются как спецификация поведения.
 
@@ -60,7 +60,7 @@
 | Кабинет рекрутера, экран согласия по ссылке | 🧩 | `frontend/src/recruiter/`, `candidate/ConsentScreen.tsx` |
 | Оценка качества (eval) | 🧩 | `eval/` |
 
-Промпты `*.v1.md` в `backend/app/interview/prompts/` — старые черновики, в коде не используются. Рабочие — `analyze_answer.v2.md` и `followup.v2.md`.
+Рабочие промпты — `analyze_answer.v3.md` и `followup.v3.md`. Версии `v2` оставлены для сравнения в eval, `*.v1.md` — старые черновики; в коде не используются.
 
 ---
 
@@ -163,9 +163,13 @@ Pydantic-схема JSON-файла из `scenarios/`. Формат описан
 
 `analyze_answer(provider, question, answers, log=...) -> Analysis`
 
-1. Отправляет в модель вопрос, пункты проверки, пример ответа и **все** ответы человека на этот вопрос (основной + после уточнений).
-2. Модель возвращает `intent` и по каждому пункту `covered` / `partial` / `missing` с цитатой.
-3. **Код** проверяет каждую цитату (`quote_is_grounded`): нет в ответе → пункт `missing`, `quote_rejected=True`.
+1. Отправляет в модель вопрос, пункты проверки, пример ответа, **все** ответы человека на этот вопрос (основной + после уточнений; если вместе длиннее 5000 символов — первый укорачивается, `fit_answers`) и отдельно последнее сообщение.
+2. Модель возвращает `intent` (`answer`, `clarify` — просит пояснить вопрос, `dont_know`, `question`, `off_topic`, `stop`) и по каждому пункту `covered` / `partial` / `missing` с цитатой.
+3. **Код** проверяет каждую цитату (`quote_match`) и записывает итог в `ProbeResult.quote_check`:
+   - `exact` — цитата есть в ответе дословно (допускается другое окончание);
+   - `fuzzy` — модель процитировала своими словами или формулировкой пункта, но не меньше половины значимых слов (минимум 2) есть в ответе. В протокол идёт **дословный фрагмент ответа** (`best_fragment`), а не слова модели;
+   - `rejected` — цитаты в ответе нет → пункт `missing`.
+   Что сказала модель до проверки, хранится в `model_status` / `model_quote` и видно в панели «Отладка».
 4. `completeness_of`: все `covered` → `complete`; хоть что-то есть → `partial`; иначе `empty`.
 5. Модель не ответила (`LLMError`) → ответ считается полным, `llm_failed=True`: интервью идёт дальше, вопрос помечается «проверить вручную».
 
@@ -173,13 +177,13 @@ Pydantic-схема JSON-файла из `scenarios/`. Формат описан
 
 ### 4.5. Уточнение — `backend/app/interview/followup.py`
 
-`make_followup(provider, question, answers, missing) -> str` — модель формулирует один вопрос по недостающим пунктам. Вместо её текста подставляется нейтральная фраза `FALLBACK`, если модель не ответила, вопрос длиннее 40 слов или без «?», есть оценочные слова или 4 слова подряд из эталонного ответа (`leaks_reference`) — то есть уточнение подсказывает ответ.
+`make_followup(provider, question, answers, missing, reveal_topics=...) -> str` — модель формулирует один вопрос по недостающим пунктам. В промпт уходит только начало ответа (400 символов), поэтому шаг быстрый даже после длинного ответа. Вместо текста модели подставляется запасная фраза (`fallback_text`), если модель не ответила, вопрос длиннее 40 слов или без «?», есть оценочные слова или 4 слова подряд из эталона, которых нет в самом вопросе (`leaks_reference`). Запасная фраза в собеседовании называет, о чём рассказать (`reveal_topics=True`); в проверке знаний — только сколько аспектов не раскрыто, без подсказок.
 
 ### 4.6. Политика и защита
 
 - `policy.py` — `decide(PolicyInput) -> NextStep`: уточнение, следующий вопрос или конец. Лимит уточнений — здесь, а не в промпте.
-- `guardrails.py` — `clean_input(text) -> (text, flags)`: флаги `empty`, `too_long` (обрезка до 2000 символов), `injection` (попытка дать модели указания). `output_is_safe(text, reference)` — нет оценок и пересказа эталона.
-- `reporting/validators.py` — `normalize`, `quote_is_grounded` (точное вхождение после нормализации или совпадение ≥ 85 %), `has_forbidden_language`, `leaks_reference`.
+- `guardrails.py` — `clean_input(text) -> (text, flags)`: флаги `empty`, `too_long` (обрезка до 3000 символов — `MAX_INPUT_CHARS`, совпадает с лимитом поля ввода и API; человек получает сообщение об обрезке), `injection` (попытка дать модели указания). `output_is_safe(text, reference, question)` — нет оценок и пересказа эталона.
+- `reporting/validators.py` — `normalize`, `quote_match` (exact / fuzzy / None, см. 4.4), `best_fragment`, `has_forbidden_language`, `leaks_reference`.
 
 ### 4.7. Диалог — `backend/app/interview/runner.py`
 
@@ -198,6 +202,10 @@ Pydantic-схема JSON-файла из `scenarios/`. Формат описан
 `Reply`: `text`, `finished`, `question_number`, `total_questions`.
 
 `QuestionState.ended_by` — почему ушли с вопроса: `complete`, `followup_limit`, `dont_know`, `off_topic`, `stopped`, `llm_failed`.
+
+Просьба пояснить вопрос (`clarify`) не тратит лимит уточнений и не засчитывается как ответ: агент отвечает пояснением (не больше 2 на вопрос, `MAX_CLARIFY`), дальше просит ответить как есть.
+
+`Turn.kind` у реплик ассистента: `greeting`, `base_question`, `followup`, `clarify`, `redirect`, `notice` (например, «ответ обрезан»), `closing`.
 
 ### 4.8. Протокол — `backend/app/reporting/protocol.py`
 
@@ -225,7 +233,7 @@ Pydantic-схема JSON-файла из `scenarios/`. Формат описан
 
 ### 4.9. API демо и чата — `backend/app/api/v1/`, `backend/app/interview/store.py`
 
-Бэкенд — тот же `InterviewRunner`, обёрнутый в HTTP. Сессии лежат в `SessionStore` в памяти процесса (D-008): токен → runner. На этапе 2 хранилище заменится БД, контракт API останется.
+Бэкенд — тот же `InterviewRunner`, обёрнутый в HTTP. Сессии лежат в `SessionStore` (D-008, D-009): в памяти процесса и копией на диске в `storage/demo_sessions/` (pickle состояния без модели), поэтому перезапуск сервера — в том числе `--reload` при правке кода — сессии не обрывает. Токен из адреса проверяется по формату до обращения к диску. После 6 часов без активности сессия удаляется. На этапе 2 хранилище заменится БД, контракт API останется.
 
 | Метод | Путь | Что делает |
 |---|---|---|
@@ -283,8 +291,8 @@ python -m app.cli [сценарий] [--list] [--topic T03] [--size 5] [--seed 4
 Пункты проверки (`probes`) — главное в сценарии: 3–4 на вопрос, каждый — одна конкретная вещь, которую можно найти в тексте. «Понимает ML» — плохой пункт; «называет схему разбиения: train/validation/test или кросс-валидация» — хороший.
 
 ### Изменить промпт
-1. Скопировать `analyze_answer.v2.md` в `analyze_answer.v3.md`, внести правки.
-2. В `analyzer.py` поменять `PROMPT_VERSION = "v3"`.
+1. Скопировать `analyze_answer.v3.md` в `analyze_answer.v4.md`, внести правки.
+2. В `analyzer.py` поменять `PROMPT_VERSION = "v4"`.
 3. Прогнать тесты и 2–3 сессии в консоли, сравнить протоколы со старой версией.
 
 ### Подключить другую модель или провайдера

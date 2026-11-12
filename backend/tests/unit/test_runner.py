@@ -115,3 +115,37 @@ def test_plural_questions():
         "21 вопрос",
         "22 вопроса",
     ]
+
+
+def test_clarify_explains_without_spending_followups():
+    r, _ = runner_for(
+        "ml_junior",
+        [
+            analysis(intent="clarify"),
+            {"question": "Расскажите про учёбу и проекты?"},
+            analysis(covered=["p1"]),
+        ],
+    )
+    r.start()
+    reply = r.handle("а что именно надо рассказать?")
+    assert reply.text == "Расскажите про учёбу и проекты?"
+    st = r.states[0]
+    assert r.index == 0 and st.followups == 0 and st.clarifications == 1 and st.answers == []
+    assert r.transcript[-1].kind == "clarify"
+
+
+def test_too_long_answer_gets_notice():
+    r, _ = runner_for("ml_junior", [analysis(covered=["p1", "p2", "p3", "p4", "p5"])])
+    r.start()
+    reply = r.handle("слово " * 700)
+    assert reply.text.startswith("Ответ длиннее 3000 символов")
+    assert any(t.kind == "notice" for t in r.transcript)
+
+
+def test_runner_pickles_without_provider():
+    import pickle
+
+    r, _ = runner_for("ml_junior", [])
+    r.start()
+    restored = pickle.loads(pickle.dumps(r))
+    assert restored.provider is None and restored.transcript[-1].kind == "base_question"

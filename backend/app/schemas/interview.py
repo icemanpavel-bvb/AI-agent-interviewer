@@ -52,6 +52,10 @@ class ProbeOut(BaseModel):
     text: str
     status: str
     quote: str | None = None
+    # Отладка: что сказала модель до проверки цитаты кодом.
+    model_status: str | None = None
+    model_quote: str | None = None
+    quote_check: str = ""  # exact | fuzzy | rejected | ""
 
 
 class LLMCallOut(BaseModel):
@@ -85,7 +89,7 @@ class SessionOut(BaseModel):
 
 
 class SendIn(BaseModel):
-    text: str = Field(max_length=4000)
+    text: str = Field(max_length=3000)  # = MAX_INPUT_CHARS в guardrails и лимит поля ввода
 
 
 class HealthOut(BaseModel):

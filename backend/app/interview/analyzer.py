@@ -1,10 +1,11 @@
 """LLM-шаг анализа ответа по пунктам проверки (D-004).
 
 Модель для каждого пункта говорит covered / partial / missing и даёт цитату.
-Дальше всё решает код: цитата сверяется с ответом (не нашлась — пункт missing),
-полнота считается по пунктам. Если модель вернула мусор — ответ считается полным,
-интервью идёт дальше, а вопрос помечается для ручной проверки. Если модель
-недоступна (LLMUnavailable) — исключение пробрасывается: ход не засчитывается.
+Дальше всё решает код: цитата сверяется с ответом (exact — дословно, fuzzy — по словам
+с учётом окончаний, тогда в протокол идёт дословный фрагмент ответа; не нашлась —
+пункт missing), полнота считается по пунктам. Если модель вернула мусор — ответ
+считается полным, интервью идёт дальше, а вопрос помечается для ручной проверки.
+Если модель недоступна (LLMUnavailable) — исключение пробрасывается: ход не засчитывается.
 """
 
 from __future__ import annotations
@@ -16,12 +17,15 @@ from pydantic import BaseModel
 
 from app.llm.base import LLMCall, LLMError, LLMProvider, LLMUnavailable, complete_json
 from app.llm.prompts import load_prompt, render
-from app.reporting.validators import quote_is_grounded
+from app.reporting.validators import best_fragment, quote_match
 from app.schemas.scenario import Question
 
-PROMPT_VERSION = "v2"
+PROMPT_VERSION = "v3"
+# Сколько символов ответов на один вопрос уходит в модель: контекст 4096 токенов,
+# из них ~1800 занимают служебный блок, инструкция, вопрос и пункты, ~400 — ответ модели.
+MAX_ANSWER_CHARS_FOR_MODEL = 5000
 
-Intent = Literal["answer", "dont_know", "question", "off_topic", "stop"]
+Intent = Literal["answer", "clarify", "dont_know", "question", "off_topic", "stop"]
 Status = Literal["covered", "partial", "missing"]
 Completeness = Literal["complete", "partial", "empty"]
 
@@ -44,9 +48,12 @@ class ProbeResult:
     id: str
     text: str
     status: Status = "missing"
-    quote: str | None = None
-    # Модель заявила раскрытие, но цитата не нашлась в ответе — пункт сброшен в missing.
-    quote_rejected: bool = False
+    quote: str | None = None  # всегда дословный фрагмент ответа человека
+    # Что сказала модель до проверки кодом — для отладки.
+    model_status: str | None = None
+    model_quote: str | None = None
+    # exact / fuzzy — как подтвердилась цитата; rejected — не нашлась, пункт сброшен в missing.
+    quote_check: str = ""
 
 
 @dataclass
@@ -76,6 +83,17 @@ def merge_best(previous: list[ProbeResult], current: list[ProbeResult]) -> list[
     return merged
 
 
+def fit_answers(answers: list[str], limit: int = MAX_ANSWER_CHARS_FOR_MODEL) -> str:
+    """Склеивает ответы на вопрос; если длинно — укорачивает первый (самый длинный) ответ с конца."""
+    if sum(len(a) for a in answers) + len(answers) <= limit or not answers:
+        return "\n".join(answers)
+    rest = "\n".join(answers[1:])
+    marker = " […]"
+    room = max(limit - len(rest) - 1 - len(marker), 1000)
+    first = answers[0][:room].rstrip() + marker
+    return "\n".join([first, rest]) if rest else first
+
+
 def analyze_answer(
     provider: LLMProvider,
     question: Question,
@@ -90,7 +108,8 @@ def analyze_answer(
         question=question.text,
         probes="\n".join(f"- {p.id}: {p.text}" for p in question.probes),
         reference=question.reference_answer or "—",
-        answer=answer_text,
+        answer=fit_answers(answers),
+        last_message=(answers[-1][:300] if answers else ""),
     )
     messages = [{"role": "system", "content": prompt.system}, {"role": "user", "content": user}]
     try:
@@ -113,10 +132,19 @@ def analyze_answer(
     for probe in question.probes:
         judgement = by_id.get(probe.id)
         result = ProbeResult(probe.id, probe.text)
+        if judgement:
+            result.model_status, result.model_quote = judgement.status, judgement.quote
         if judgement and judgement.status != "missing" and out.intent == "answer":
-            if judgement.quote and quote_is_grounded(judgement.quote, answer_text):
-                result.status, result.quote = judgement.status, judgement.quote
+            check = quote_match(judgement.quote, answer_text) if judgement.quote else None
+            if check:
+                result.status = judgement.status
+                result.quote_check = check
+                result.quote = (
+                    judgement.quote
+                    if check == "exact"
+                    else best_fragment(judgement.quote, answer_text)
+                )
             else:
-                result.quote_rejected = True
+                result.quote_check = "rejected"
         results.append(result)
     return Analysis(out.intent, results, completeness_of(results))

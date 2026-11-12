@@ -5,7 +5,7 @@ import { Link, useParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import DebugPanel from "../components/DebugPanel";
 import ProtocolView from "../components/ProtocolView";
-import type { Message, Protocol, Session } from "../types";
+import { MAX_ANSWER_CHARS, type Message, type Protocol, type Session } from "../types";
 
 export default function ChatPage() {
   const { token = "" } = useParams();
@@ -57,14 +57,17 @@ export default function ChatPage() {
   async function send() {
     const value = text.trim();
     if (!value || pending !== null || !session || session.finished) return;
+    if (value.length > MAX_ANSWER_CHARS) return;
     setPending(value);
     setText("");
     setError(null);
     try {
       setSession(await api.send(token, value));
     } catch (e) {
+      const err = e as ApiError;
       setText(value); // ответ не засчитан — возвращаем его в поле ввода
-      setError((e as ApiError).message);
+      if (err.status === 404) setFatal(err.message);
+      else setError(err.message);
     } finally {
       setPending(null);
       inputRef.current?.focus();
@@ -92,12 +95,13 @@ export default function ChatPage() {
     return (
       <div className="page narrow">
         <div className="banner banner-error">{fatal}</div>
-        <Link to="/demo" className="btn">← К выбору сценария</Link>
+        <Link to="/demo" className="btn btn-primary">Начать заново</Link>
       </div>
     );
   }
   if (!session) return <div className="page narrow muted">Загружаю сессию…</div>;
 
+  const tooLong = text.trim().length > MAX_ANSWER_CHARS;
   const progress = session.finished
     ? 100
     : Math.round(((session.question_number - 1) / session.total_questions) * 100);
@@ -158,13 +162,23 @@ export default function ChatPage() {
                 onKeyDown={onKey}
                 placeholder="Ваш ответ… (Enter — отправить, Shift+Enter — новая строка)"
                 rows={3}
-                maxLength={4000}
                 disabled={pending !== null}
                 autoFocus
               />
-              <button className="btn btn-primary" onClick={send} disabled={pending !== null || !text.trim()}>
+              <button
+                className="btn btn-primary"
+                onClick={send}
+                disabled={pending !== null || !text.trim() || tooLong}
+              >
                 Отправить
               </button>
+            </div>
+            <div className={`counter ${tooLong ? "counter-over" : ""}`}>
+              {tooLong
+                ? `Ответ длиннее ${MAX_ANSWER_CHARS} символов — сократите на ${text.trim().length - MAX_ANSWER_CHARS}`
+                : text.length > MAX_ANSWER_CHARS * 0.8
+                  ? `${text.trim().length} / ${MAX_ANSWER_CHARS}`
+                  : ""}
             </div>
           </footer>
         )}
@@ -181,7 +195,9 @@ function Bubble({ m, total }: { m: Message; total: number }) {
       ? `Вопрос ${m.question_number} из ${total}`
       : m.kind === "followup"
         ? "Уточнение"
-        : null;
+        : m.kind === "clarify"
+          ? "Пояснение"
+          : null;
   return (
     <div className={`bubble bubble-bot kind-${m.kind}`}>
       {label && <span className="bubble-label">{label}</span>}

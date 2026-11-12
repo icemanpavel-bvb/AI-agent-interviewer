@@ -1,6 +1,28 @@
 // Отладка для тестирования: как модель разобрала последний ответ (пункты, цитаты, время).
 import { COMPLETENESS_LABEL, PROBE_LABEL, PROBE_MARK } from "../labels";
-import type { Debug } from "../types";
+import type { Debug, Probe } from "../types";
+
+const MODEL_STATUS: Record<string, string> = { covered: "раскрыт", partial: "частично", missing: "нет" };
+
+// Что сказала модель до проверки кодом — чтобы видеть, кто ошибся: модель или проверка цитат.
+function ModelVerdict({ probe }: { probe: Probe }) {
+  if (probe.model_status == null) return <div className="verdict">модель про этот пункт ничего не сказала</div>;
+  const said = `модель: ${MODEL_STATUS[probe.model_status] ?? probe.model_status}`;
+  if (probe.quote_check === "rejected")
+    return (
+      <div className="verdict verdict-bad">
+        {said}, цитата «{probe.model_quote ?? "—"}» не найдена в ответе → пункт сброшен
+      </div>
+    );
+  if (probe.quote_check === "fuzzy")
+    return (
+      <div className="verdict">
+        {said}, цитата совпала по словам (модель привела «{probe.model_quote}»), показан фрагмент ответа
+      </div>
+    );
+  if (probe.quote_check === "exact") return <div className="verdict">{said}, цитата найдена дословно</div>;
+  return <div className="verdict">{said}</div>;
+}
 
 export default function DebugPanel({ debug }: { debug: Debug | null }) {
   return (
@@ -21,6 +43,7 @@ export default function DebugPanel({ debug }: { debug: Debug | null }) {
                 <div>
                   <div>{p.text}</div>
                   {p.quote && <q>{p.quote}</q>}
+                  <ModelVerdict probe={p} />
                 </div>
               </li>
             ))}
@@ -39,7 +62,8 @@ export default function DebugPanel({ debug }: { debug: Debug | null }) {
         </>
       )}
       <p className="muted small">
-        В обычной работе кандидат это не видит. ✓ — пункт раскрыт, ~ — частично, ✗ — нет. Цитаты сверены кодом с ответом.
+        В обычной работе кандидат это не видит. ✓ — пункт раскрыт, ~ — частично, ✗ — нет. Под пунктом — что
+        сказала модель и как код проверил её цитату.
       </p>
     </aside>
   );

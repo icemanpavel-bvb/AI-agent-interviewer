@@ -8,7 +8,7 @@
 
 from fastapi import APIRouter, HTTPException
 
-from app.api.deps import StoreDep
+from app.api.deps import ProviderDep, StoreDep
 from app.interview.store import SessionEntry, SessionStore
 from app.llm.base import LLMUnavailable
 from app.reporting.protocol import build_protocol
@@ -25,10 +25,15 @@ from app.schemas.interview import (
 router = APIRouter()
 
 
-def _entry(token: str, sessions: SessionStore) -> SessionEntry:
+def _entry(token: str, sessions: SessionStore, provider=None) -> SessionEntry:
     entry = sessions.get(token)
     if entry is None:
-        raise HTTPException(404, "Сессия не найдена или истекла")
+        raise HTTPException(
+            404,
+            "Сессия не найдена: прошло больше 6 часов без активности или данные сервера очищены",
+        )
+    if provider is not None and entry.runner.provider is None:
+        entry.runner.provider = provider  # сессия загружена с диска — подставляем модель
     return entry
 
 
@@ -59,7 +64,16 @@ def session_out(entry: SessionEntry) -> SessionOut:
             followups=st.followups,
             max_followups=st.question.max_followups,
             probes=[
-                ProbeOut(id=p.id, text=p.text, status=p.status, quote=p.quote) for p in st.probes
+                ProbeOut(
+                    id=p.id,
+                    text=p.text,
+                    status=p.status,
+                    quote=p.quote,
+                    model_status=p.model_status,
+                    model_quote=p.model_quote,
+                    quote_check=p.quote_check,
+                )
+                for p in st.probes
             ],
             last_calls=[
                 LLMCallOut(
@@ -91,8 +105,8 @@ def get_session(token: str, sessions: StoreDep) -> SessionOut:
 
 
 @router.post("/{token}/messages", response_model=SessionOut)
-def send_message(token: str, body: SendIn, sessions: StoreDep) -> SessionOut:
-    entry = _entry(token, sessions)
+def send_message(token: str, body: SendIn, sessions: StoreDep, provider: ProviderDep) -> SessionOut:
+    entry = _entry(token, sessions, provider)
     if not entry.lock.acquire(blocking=False):
         raise HTTPException(409, "Предыдущий ответ ещё обрабатывается")
     try:
@@ -104,6 +118,7 @@ def send_message(token: str, body: SendIn, sessions: StoreDep) -> SessionOut:
             raise HTTPException(
                 503, f"Модель недоступна, ответ не засчитан — отправьте его ещё раз. {e}"
             ) from e
+        sessions.save(entry)
         return session_out(entry)
     finally:
         entry.lock.release()
@@ -114,6 +129,7 @@ def stop(token: str, sessions: StoreDep) -> SessionOut:
     entry = _entry(token, sessions)
     with entry.lock:
         entry.runner.stop()
+        sessions.save(entry)
     return session_out(entry)
 
 
