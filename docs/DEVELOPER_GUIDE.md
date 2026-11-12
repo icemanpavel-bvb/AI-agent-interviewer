@@ -368,3 +368,4 @@ ruff format backend scripts eval           # форматирование
 | На /demo пусто, в консоли 404 на `/api/v1/demo/...` | Бэкенд запущен без `DEMO_MODE=true` |
 | В чате «Модель недоступна, ответ не засчитан» | Ollama остановилась или модель выгрузилась с ошибкой: `ollama ps`, `sudo systemctl restart ollama`; затем отправить ответ ещё раз |
 | `npm: command not found` | `sudo apt install nodejs npm` (нужен Node.js 18+: `node -v`) |
+| Проблемы на Windows | Отдельная таблица в [README → Быстрый старт на Windows](../README.md#если-что-то-не-так-на-windows) |

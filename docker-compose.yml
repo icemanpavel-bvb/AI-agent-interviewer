@@ -11,6 +11,10 @@ services:
   backend:
     build: ./backend
     env_file: .env
+    environment:
+      # Внутри контейнера «localhost» — сам контейнер: подменяем адреса из .env.
+      DATABASE_URL: postgresql+asyncpg://interviewer:interviewer@db:5432/interviewer
+      OLLAMA_URL: http://host.docker.internal:11434
     depends_on: [db]
     extra_hosts: ["host.docker.internal:host-gateway"]
     volumes: [./storage:/app/storage]

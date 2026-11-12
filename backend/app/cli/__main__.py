@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import os
 import random
 import sys
 import time
@@ -34,7 +35,17 @@ MARK = {"covered": "✓", "partial": "~", "missing": "✗", "unknown": "?"}
 DIM, BOLD, RESET = "\033[2m", "\033[1m", "\033[0m"
 
 
+def _setup_console() -> None:
+    """Windows: включить цвета в старой консоли и вывод в UTF-8 (символы ✓ ✗ при перенаправлении в файл)."""
+    if os.name == "nt":
+        os.system("")  # включает обработку ANSI-последовательностей в conhost
+    for stream in (sys.stdout, sys.stderr):
+        with contextlib.suppress(AttributeError, ValueError):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def main(argv: list[str] | None = None) -> int:
+    _setup_console()
     args = _parse(argv)
     if args.list or not args.scenario:
         _print_list(args.scenarios_dir)
