@@ -156,3 +156,22 @@ def test_long_answer_is_never_a_question_and_quote_is_capped():
         {"intent": "answer", "probes": [{"id": "p1", "status": "covered", "quote": "а" * 500}]}
     )
     assert len(j.probes[0].quote) == MAX_QUOTE_CHARS
+
+
+def test_followup_retries_on_hint_then_falls_back():
+    q = load_scenario("student_course").questions[0]
+    missing = ["классификация через softmax и кросс-энтропию"]
+    good = {"question": "Как, по-вашему, сеть выбирает слово на выходе?"}
+    hint = {"question": "Как решается задача с помощью softmax и кросс-энтропии?"}
+    leading = {"question": "Упомянули ли вы, что сеть учит векторы?"}
+
+    llm = FakeLLM([hint, good])
+    assert make_followup(llm, q, ["ответ"], missing) == good["question"]
+    assert "softmax" in llm.requests[1][-1]["content"]  # модели объяснили, что не так
+
+    llm = FakeLLM([leading, hint])
+    assert make_followup(llm, q, ["ответ"], missing) == fallback_text(missing, reveal_topics=False)
+
+    # в собеседовании называть тему можно, «Упомянули ли вы» — нельзя
+    llm = FakeLLM([hint])
+    assert make_followup(llm, q, ["ответ"], missing, reveal_topics=True) == hint["question"]

@@ -103,3 +103,16 @@ def leaks_reference(text: str, reference: str, question: str = "", n: int = 4) -
 
     leaked = shingles(ref) - shingles(normalize(question).split())
     return any(s in leaked for s in shingles(words))
+
+
+def hint_terms(text: str, missing: list[str], question: str = "", answers: str = "") -> set[str]:
+    """Термины из недостающих пунктов, которые уточнение называет впервые (D-012).
+
+    Слово считается подсказкой, если оно есть в формулировке пункта, но его нет ни в
+    вопросе, ни в ответах человека: значит, его принесло уточнение. Сравнение по основам
+    (первые 5 букв), слова короче 5 букв не учитываются.
+    """
+    known = {_stem(w) for w in _content_words(f"{question} {answers}", min_len=5)}
+    probe = {_stem(w) for w in _content_words(" ".join(missing), min_len=5)}
+    said = {_stem(w): w for w in _content_words(text, min_len=5)}
+    return {word for stem, word in said.items() if stem in probe and stem not in known}

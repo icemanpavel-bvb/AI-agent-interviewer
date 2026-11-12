@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from app.interview.guardrails import output_is_safe
 from app.llm.base import LLMCall, LLMError, LLMProvider, complete_json
 from app.llm.prompts import load_prompt, render
+from app.reporting.validators import hint_terms
 from app.schemas.scenario import Question
 
 PROMPT_VERSION = "v4"
@@ -41,8 +42,14 @@ MODE_RULES = {
     ),
 }
 
-# Реплика о человеке в третьем лице вместо вопроса к нему.
-_THIRD_PERSON = re.compile(r"^\s*(упомянут\w*|указан\w*|есть ли в ответе|в ответе)", re.IGNORECASE)
+# Наводящая форма: о человеке в третьем лице («Упомянуто ли в ответе…») или вопрос «да/нет»
+# с готовым ответом внутри («Упомянули ли вы, что…», «Знаете ли вы, что…») — D-010, D-012.
+_LEADING = re.compile(
+    r"^\s*(упомянут\w*|указан\w*|есть ли в ответе|в ответе)"
+    r"|\b(упомян|указ|назв|отмет|учл|учит|знает)\w*\s+ли\b"
+    r"|\bли\s+вы\b[^?]*\bчто\b",
+    re.IGNORECASE,
+)
 
 
 def fallback_text(missing: list[str], *, reveal_topics: bool) -> str:
@@ -84,19 +91,47 @@ def make_followup(
     )
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
     fallback = fallback_text(missing, reveal_topics=reveal_topics)
-    try:
-        text = complete_json(
-            provider,
-            messages,
-            FollowupOutput,
-            purpose="followup",
-            prompt_version=prompt.tag,
-            log=log,
-        ).question.strip()
-    except LLMError:
+    for attempt in range(2):
+        try:
+            text = complete_json(
+                provider,
+                messages,
+                FollowupOutput,
+                purpose="followup",
+                prompt_version=prompt.tag,
+                log=log,
+            ).question.strip()
+        except LLMError:
+            return fallback
+        problem = _problem(text, question, answers, missing, reveal_topics)
+        if not problem:
+            return text
+        if attempt == 0 and problem.startswith("—"):
+            # Одна повторная попытка с объяснением, что не так (D-012); дальше — заготовка.
+            messages = [
+                *messages,
+                {
+                    "role": "user",
+                    "content": f"Не подходит: {problem[1:].strip()} Задай другой вопрос.",
+                },
+            ]
+            continue
         return fallback
-    if len(text.split()) > MAX_WORDS or "?" not in text or _THIRD_PERSON.match(text):
-        return fallback
+    return fallback
+
+
+def _problem(
+    text: str, question: Question, answers: list[str], missing: list[str], reveal_topics: bool
+) -> str:
+    """Что не так с уточнением; пустая строка — подходит. «—» в начале — можно попросить переписать."""
+    if len(text.split()) > MAX_WORDS or "?" not in text:
+        return "format"
     if not output_is_safe(text, question.reference_answer, question.text):
-        return fallback
-    return text
+        return "unsafe"
+    if _LEADING.search(text):
+        return "— вопрос с готовым ответом («Упомянули ли вы, что…»). Спроси открыто: «Как…», «Почему…», «Что…»."
+    if not reveal_topics:
+        terms = hint_terms(text, missing, question.text, " ".join(answers))
+        if terms:
+            return f"— это подсказка, человек ещё не называл: {', '.join(sorted(terms))}. Не называй эти слова."
+    return ""
