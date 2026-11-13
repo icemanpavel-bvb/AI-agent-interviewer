@@ -1,0 +1,13 @@
+# Единые переводы строк (LF) у всех, в том числе на Windows:
+# иначе git на Windows сохраняет файлы с CRLF и проверки форматирования начинают спорить.
+* text=auto eol=lf
+
+# PowerShell-скрипты и .bat удобнее с CRLF
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+
+# Бинарные файлы не трогаем
+*.png binary
+*.jpg binary
+*.pdf binary
+*.docx binary

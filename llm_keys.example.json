@@ -1,0 +1,22 @@
+{
+  "_comment": "Скопируйте в llm_keys.json (он в .gitignore) и впишите свои ключи. Ключ словаря — имя модели в интерфейсе: «сервис/модель у сервиса», значение — ключ API. Записи с незаполненным ключом пропускаются. Подробнее — README, раздел «Облачные модели».",
+
+  "groq/llama-3.3-70b-versatile": "<ключ с console.groq.com>",
+  "openrouter/openai/gpt-oss-120b:free": "<ключ с openrouter.ai>",
+  "openrouter/meta-llama/llama-3.3-70b-instruct:free": "<тот же ключ OpenRouter>",
+
+  "gigachat/GigaChat": {
+    "provider": "gigachat",
+    "model": "GigaChat",
+    "api_key": "<ключ авторизации из личного кабинета developers.sber.ru>",
+    "ca_file": null
+  },
+
+  "_пример_своего_сервиса": {
+    "provider": "custom",
+    "base_url": "https://адрес-сервиса/v1",
+    "model": "имя-модели",
+    "api_key": "<ключ>",
+    "json_mode": false
+  }
+}

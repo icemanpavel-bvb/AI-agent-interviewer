@@ -2,6 +2,8 @@ __pycache__/
 *.pyc
 .venv/
 .env
+# Ключи облачных моделей (D-013) — только на своём компьютере; образец — llm_keys.example.json
+llm_keys.json
 node_modules/
 dist/
 storage/
@@ -13,3 +15,5 @@ storage/
 # лекции — чужие материалы курса; гайд T06 содержит ключ практического кейса.
 лекции/
 T06_*.docx
+TEAM-12. БТ и User Story(1).docx
+01_PROJECT_CHARTER_Устав_и_паспорт_AI-системы.docx
