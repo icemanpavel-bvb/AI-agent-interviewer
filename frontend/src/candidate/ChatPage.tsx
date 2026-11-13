@@ -117,6 +117,7 @@ export default function ChatPage() {
               {session.finished
                 ? session.stopped ? "Сессия прервана" : "Сессия завершена"
                 : `Вопрос ${session.question_number} из ${session.total_questions}`}
+              {session.model && ` · ${session.model_local ? "локальная модель" : session.model}`}
             </span>
           </div>
           <button className={`btn btn-small ${debug ? "btn-on" : ""}`} onClick={toggleDebug}>

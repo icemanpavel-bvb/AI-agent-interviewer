@@ -26,6 +26,7 @@ class ScenarioCard(BaseModel):
 
 class StartDemoIn(BaseModel):
     scenario_id: str
+    model: str | None = None  # local или имя из llm_keys.json; None — локальная
     topic: str | None = None
     size: int | None = Field(default=None, ge=1, le=20)
     seed: int | None = None
@@ -80,6 +81,8 @@ class DebugOut(BaseModel):
 class SessionOut(BaseModel):
     token: str
     scenario: ScenarioBrief
+    model: str = ""
+    model_local: bool = True
     question_number: int
     total_questions: int
     finished: bool
@@ -90,6 +93,14 @@ class SessionOut(BaseModel):
 
 class SendIn(BaseModel):
     text: str = Field(max_length=3000)  # = MAX_INPUT_CHARS в guardrails и лимит поля ввода
+
+
+class ModelOut(BaseModel):
+    id: str
+    provider: str
+    model: str
+    local: bool
+    note: str = ""
 
 
 class HealthOut(BaseModel):

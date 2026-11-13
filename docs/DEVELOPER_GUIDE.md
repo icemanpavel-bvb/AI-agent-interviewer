@@ -44,7 +44,7 @@
 | Сценарии вакансий и их проверка | ✅ | `scenarios/*.json`, `backend/app/schemas/scenario.py`, `backend/app/scenarios.py`, `scripts/validate_scenarios.py` |
 | Выбор вопросов на сессию | ✅ | `backend/app/interview/question_plan.py` |
 | Диалог: анализ, уточнения, переходы | ✅ | `backend/app/interview/runner.py`, `analyzer.py`, `followup.py`, `policy.py`, `guardrails.py` |
-| Работа с моделью | ✅ | `backend/app/llm/base.py`, `ollama.py`, `fake.py`, `prompts.py` |
+| Работа с моделью | ✅ | `backend/app/llm/base.py`, `ollama.py`, `openai_compat.py`, `registry.py`, `fake.py`, `prompts.py` |
 | Протокол и проверки кодом | ✅ | `backend/app/reporting/protocol.py`, `validators.py` |
 | Консольный прототип | ✅ | `backend/app/cli/__main__.py` |
 | API демо и чата (сессии в памяти) | ✅ | `backend/app/api/v1/demo.py`, `interview.py`, `backend/app/interview/store.py`, `backend/app/main.py` |
@@ -55,7 +55,8 @@
 | Interview Engine с сохранением в БД | 🧩 | `backend/app/interview/engine.py` (будет обёрткой над `runner.py`) |
 | Ответы на вопросы кандидата о вакансии | 🧩 | `backend/app/interview/candidate_qa.py` |
 | PDF, отчёт для рекрутера, версии | 🧩 | `backend/app/reporting/builder.py`, `pdf.py` |
-| GigaChat API, маскирование ПДн | 🧩 | `backend/app/llm/gigachat.py`, `pii.py` |
+| GigaChat API | ✅ | `backend/app/llm/openai_compat.py` (провайдер `gigachat`, D-013) |
+| Маскирование ПДн | 🧩 | `backend/app/llm/pii.py` |
 | Уведомления, планировщик | 🧩 | `backend/app/notifications/`, `backend/app/jobs/` |
 | Кабинет рекрутера, экран согласия по ссылке | 🧩 | `frontend/src/recruiter/`, `candidate/ConsentScreen.tsx` |
 | Оценка качества (eval) | 🧩 | `eval/` |
@@ -141,6 +142,8 @@ Pydantic-схема JSON-файла из `scenarios/`. Формат описан
 |---|---|
 | `base.py` | `LLMProvider` — интерфейс с одним методом `chat(messages, json_schema=None)`. `complete_json(provider, messages, Schema, purpose=..., prompt_version=..., log=...)` — вызов с ответом строго по Pydantic-схеме: вырезает JSON из ответа, проверяет, при ошибке повторяет до 2 раз с текстом ошибки, пишет `LLMCall` в журнал. Если так и не получилось — `LLMError`. |
 | `ollama.py` | `OllamaProvider` — HTTP к Ollama на стандартной библиотеке. JSON-схема передаётся в `format`, поэтому модель физически не может вернуть другую структуру. Параметры по умолчанию из замеров: `temperature=0`, `num_ctx=4096`, `keep_alive=30m`. `warmup()` — прогрев. Модель и адрес берутся из аргументов или из `LLM_MODEL` / `OLLAMA_URL`. |
+| `openai_compat.py` | `OpenAICompatProvider` — облачные модели через OpenAI-совместимый API (Groq, OpenRouter, Gemini, GigaChat API и др., D-013). Просит `response_format: json_object`; если модель не умеет — запоминает и полагается на промпт. Ошибки 401/403/404/429 переводятся в понятные `LLMUnavailable` (ход не засчитывается), ключ из текста ошибок вырезается. Для GigaChat — OAuth по ключу авторизации, токен кэшируется на 30 минут. |
+| `registry.py` | `ModelRegistry` — локальная модель плюс облачные из `llm_keys.json` (в `.gitignore`, образец `llm_keys.example.json`). Короткая запись `"сервис/модель": "ключ"`, полная — объект с `base_url`. Файл перечитывается при изменении. Наружу (`GET /api/v1/demo/models`) — только имена. Сессия хранит `model_id` и при каждом ходе берёт модель из реестра. |
 | `fake.py` | `FakeLLM` для тестов: отдаёт заданные ответы по очереди (строка, dict или функция от сообщений). Запросы сохраняет в `.requests`. |
 | `prompts.py` | `load_prompt(name, version)` читает `name.version.md`, `render(template, key=value)` подставляет `{{key}}`. |
 

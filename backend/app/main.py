@@ -13,10 +13,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.v1 import router as api_v1
-from app.core.config import settings
+from app.core.config import ROOT, settings
 from app.jobs.scheduler import start_scheduler, stop_scheduler
 from app.llm.base import LLMError
 from app.llm.ollama import OllamaProvider
+from app.llm.registry import ModelRegistry
 
 log = logging.getLogger("app")
 
@@ -41,9 +42,12 @@ def _warmup(provider: OllamaProvider) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.provider = make_provider()
+    local = make_provider()
+    app.state.registry = ModelRegistry(
+        local, ROOT / settings.llm_keys_file, max_tokens=settings.llm_num_predict
+    )
     if settings.llm_warmup_on_start and settings.demo_mode:
-        threading.Thread(target=_warmup, args=(app.state.provider,), daemon=True).start()
+        threading.Thread(target=_warmup, args=(local,), daemon=True).start()
     start_scheduler()
     yield
     stop_scheduler()

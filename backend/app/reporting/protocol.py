@@ -91,7 +91,7 @@ def build_protocol(runner: InterviewRunner) -> dict:
         "questions": questions,
         "transcript": [asdict(t) for t in runner.transcript],
         "llm": {
-            "model": getattr(runner.provider, "model", "?"),
+            "model": getattr(runner, "model_label", None) or getattr(runner.provider, "model", "?"),
             "calls": len(calls),
             "invalid_json": sum(1 for c in calls if not c.valid_json),
             "avg_latency_ms": int(sum(c.latency_ms for c in calls) / len(calls)) if calls else 0,

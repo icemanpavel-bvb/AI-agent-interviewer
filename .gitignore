@@ -2,6 +2,8 @@ __pycache__/
 *.pyc
 .venv/
 .env
+# Ключи облачных моделей (D-013) — только на своём компьютере; образец — llm_keys.example.json
+llm_keys.json
 node_modules/
 dist/
 storage/

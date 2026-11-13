@@ -110,6 +110,8 @@ select:focus, textarea:focus { outline: 2px solid var(--accent-soft); border-col
 /* ---------- демо-страница ---------- */
 .page { max-width: 1120px; margin: 0 auto; padding: 40px 24px 56px; }
 .page.narrow { max-width: 640px; }
+.model-box { display: grid; gap: 8px; justify-items: end; min-width: 260px; }
+.model-box .field { width: 100%; }
 .page-head { display: flex; gap: 24px; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; }
 .eyebrow { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.75rem; color: var(--muted); margin: 0 0 0.4em; }
 .lead { color: var(--muted); max-width: 62ch; margin: 0; }
@@ -215,6 +217,7 @@ select:focus, textarea:focus { outline: 2px solid var(--accent-soft); border-col
 @media (max-width: 600px) {
   .page { padding: 24px 16px 40px; }
   .page-head { flex-direction: column; gap: 12px; }
+  .model-box { justify-items: start; width: 100%; min-width: 0; }
   h1 { font-size: 1.6rem; }
   .bubble { max-width: 90%; }
   .messages, .composer { padding-left: 16px; padding-right: 16px; }

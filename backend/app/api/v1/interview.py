@@ -8,9 +8,10 @@
 
 from fastapi import APIRouter, HTTPException
 
-from app.api.deps import ProviderDep, StoreDep
+from app.api.deps import RegistryDep, StoreDep
 from app.interview.store import SessionEntry, SessionStore
 from app.llm.base import LLMUnavailable
+from app.llm.registry import ModelRegistry
 from app.reporting.protocol import build_protocol
 from app.schemas.interview import (
     DebugOut,
@@ -25,15 +26,19 @@ from app.schemas.interview import (
 router = APIRouter()
 
 
-def _entry(token: str, sessions: SessionStore, provider=None) -> SessionEntry:
+def _entry(
+    token: str, sessions: SessionStore, registry: ModelRegistry | None = None
+) -> SessionEntry:
     entry = sessions.get(token)
     if entry is None:
         raise HTTPException(
             404,
             "Сессия не найдена: прошло больше 6 часов без активности или данные сервера очищены",
         )
-    if provider is not None and entry.runner.provider is None:
-        entry.runner.provider = provider  # сессия загружена с диска — подставляем модель
+    if registry is not None:
+        # Модель берётся по имени при каждом ходе: сессия могла загрузиться с диска,
+        # а ключ в llm_keys.json — поменяться. Нет модели — LLMUnavailable (503).
+        entry.runner.provider = registry.get(getattr(entry.runner, "model_id", "local"))
     return entry
 
 
@@ -89,6 +94,8 @@ def session_out(entry: SessionEntry) -> SessionOut:
     sc = r.scenario
     return SessionOut(
         token=entry.token,
+        model=getattr(r, "model_label", ""),
+        model_local=getattr(r, "model_id", "local") == "local",
         scenario=ScenarioBrief(id=sc.id, title=sc.title, kind=sc.kind, level=sc.level),
         question_number=min(r.index + 1, len(r.plan)),
         total_questions=len(r.plan),
@@ -105,8 +112,11 @@ def get_session(token: str, sessions: StoreDep) -> SessionOut:
 
 
 @router.post("/{token}/messages", response_model=SessionOut)
-def send_message(token: str, body: SendIn, sessions: StoreDep, provider: ProviderDep) -> SessionOut:
-    entry = _entry(token, sessions, provider)
+def send_message(token: str, body: SendIn, sessions: StoreDep, registry: RegistryDep) -> SessionOut:
+    try:
+        entry = _entry(token, sessions, registry)
+    except LLMUnavailable as e:
+        raise HTTPException(503, str(e)) from e
     if not entry.lock.acquire(blocking=False):
         raise HTTPException(409, "Предыдущий ответ ещё обрабатывается")
     try:

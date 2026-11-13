@@ -1,4 +1,4 @@
-"""Общие зависимости эндпоинтов: модель, хранилище сессий, демо-режим."""
+"""Общие зависимости эндпоинтов: реестр моделей, хранилище сессий, демо-режим."""
 
 from typing import Annotated
 
@@ -6,11 +6,11 @@ from fastapi import Depends, HTTPException, Request
 
 from app.core.config import settings
 from app.interview.store import SessionStore, store
-from app.llm.base import LLMProvider
+from app.llm.registry import ModelRegistry
 
 
-def get_provider(request: Request) -> LLMProvider:
-    return request.app.state.provider
+def get_registry(request: Request) -> ModelRegistry:
+    return request.app.state.registry
 
 
 def get_store() -> SessionStore:
@@ -22,5 +22,5 @@ def require_demo() -> None:
         raise HTTPException(404, "Демо-режим выключен (DEMO_MODE=false)")
 
 
-ProviderDep = Annotated[LLMProvider, Depends(get_provider)]
+RegistryDep = Annotated[ModelRegistry, Depends(get_registry)]
 StoreDep = Annotated[SessionStore, Depends(get_store)]

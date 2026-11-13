@@ -7,11 +7,12 @@ pytest.importorskip("httpx")
 
 from fastapi.testclient import TestClient
 
-from app.api.deps import get_provider, get_store
+from app.api.deps import get_registry, get_store
 from app.core.config import settings
 from app.interview.store import SessionStore
 from app.llm.base import LLMUnavailable
 from app.llm.fake import FakeLLM
+from app.llm.registry import ModelRegistry
 from app.main import app
 
 
@@ -28,15 +29,17 @@ def cover_all(messages):
 
 
 @pytest.fixture
-def client(monkeypatch):
+def client(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "demo_mode", True)
     monkeypatch.setattr(settings, "llm_warmup_on_start", False)
     llm = FakeLLM(default=cover_all)
-    app.dependency_overrides[get_provider] = lambda: llm
+    registry = ModelRegistry(llm, tmp_path / "llm_keys.json")
+    app.dependency_overrides[get_registry] = lambda: registry
     sessions = SessionStore()
     app.dependency_overrides[get_store] = lambda: sessions
     with TestClient(app) as c:
         c.llm = llm
+        c.registry = registry
         yield c
     app.dependency_overrides.clear()
 
@@ -128,3 +131,39 @@ def test_too_long_message_rejected(client):
         client.post(f"/api/v1/interview/{token}/messages", json={"text": "а" * 3001}).status_code
         == 422
     )
+
+
+def test_models_and_cloud_choice(client):
+    models = client.get("/api/v1/demo/models").json()
+    assert [m["id"] for m in models] == ["local"]
+    r = client.post("/api/v1/demo/start", json={"scenario_id": "ml_junior", "model": "groq/нет"})
+    assert r.status_code == 400
+
+    cloud = FakeLLM(default=cover_all)
+    client.registry.keys_file.write_text(
+        '{"groq/llama-3.3-70b-versatile": "gsk_secret", "_comment": "x"}', encoding="utf-8"
+    )
+    models = client.get("/api/v1/demo/models").json()
+    assert [m["id"] for m in models] == ["local", "groq/llama-3.3-70b-versatile"]
+    assert "gsk_secret" not in str(models)
+    client.registry.get("groq/llama-3.3-70b-versatile")  # создаём провайдер и подменяем фейком
+    client.registry._providers["groq/llama-3.3-70b-versatile"] = cloud
+
+    s = client.post(
+        "/api/v1/demo/start",
+        json={"scenario_id": "ml_junior", "model": "groq/llama-3.3-70b-versatile"},
+    ).json()
+    assert s["model"] == "groq/llama-3.3-70b-versatile" and not s["model_local"]
+    client.post(f"/api/v1/interview/{s['token']}/messages", json={"text": "Пять лет делал модели."})
+    assert cloud.requests and not client.llm.requests  # ответ проверила выбранная модель
+    proto = client.get(f"/api/v1/interview/{s['token']}/protocol").json()
+    assert proto["llm"]["model"] == "groq/llama-3.3-70b-versatile"
+
+    # ключ убрали из файла — ход не засчитывается, понятная ошибка
+    client.registry.keys_file.write_text("{}", encoding="utf-8")
+    import os
+    import time
+
+    os.utime(client.registry.keys_file, (time.time() + 5, time.time() + 5))
+    r = client.post(f"/api/v1/interview/{s['token']}/messages", json={"text": "ещё"})
+    assert r.status_code == 503 and "llm_keys.json" in r.json()["detail"]

@@ -1,5 +1,5 @@
 // Все запросы к бэкенду в одном месте. Базовый путь /api/v1 (в разработке — прокси Vite на :8000).
-import type { Health, Protocol, ScenarioCard, Session } from "../types";
+import type { Health, ModelInfo, Protocol, ScenarioCard, Session } from "../types";
 
 export class ApiError extends Error {
   constructor(
@@ -41,9 +41,11 @@ const post = (body?: unknown): RequestInit => ({
 });
 
 export const api = {
-  health: () => request<Health>("/demo/health"),
+  models: () => request<ModelInfo[]>("/demo/models"),
+  health: (model?: string) =>
+    request<Health>(`/demo/health${model ? `?model=${encodeURIComponent(model)}` : ""}`),
   scenarios: () => request<ScenarioCard[]>("/demo/scenarios"),
-  start: (body: { scenario_id: string; topic?: string; size?: number }) =>
+  start: (body: { scenario_id: string; topic?: string; size?: number; model?: string }) =>
     request<Session>("/demo/start", post(body)),
   session: (token: string) => request<Session>(`/interview/${token}`),
   send: (token: string, text: string) =>

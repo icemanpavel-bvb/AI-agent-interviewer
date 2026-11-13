@@ -82,9 +82,14 @@ class InterviewRunner:
         plan: list[Question] | None = None,
         rng: random.Random | None = None,
         topic: str | None = None,
+        model_id: str = "local",
     ) -> None:
         self.scenario = scenario
         self.provider = provider
+        # Какая модель ведёт сессию (D-013): local или имя из llm_keys.json. Не меняется до конца,
+        # чтобы все ответы проверяла одна и та же модель.
+        self.model_id = model_id
+        self.model_label = model_id if model_id != "local" else getattr(provider, "model", "?")
         self.plan = plan or plan_questions(scenario, rng, topic)
         self.states = [QuestionState(q) for q in self.plan]
         self.index = 0

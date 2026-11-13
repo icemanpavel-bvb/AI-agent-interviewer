@@ -1,20 +1,50 @@
-// Демо-страница /demo (D-005): проверка модели, карточки сценариев, старт сессии.
+// Демо-страница /demo (D-005): выбор модели (D-013), её проверка, карточки сценариев, старт сессии.
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { api, ApiError } from "../api/client";
 import { KIND_LABEL, LEVEL_LABEL, questionsWord } from "../labels";
-import type { Health, ScenarioCard } from "../types";
+import type { Health, ModelInfo, ScenarioCard } from "../types";
+
+function loadModel(): string {
+  try {
+    return localStorage.getItem("model") ?? "local";
+  } catch {
+    return "local";
+  }
+}
+
 
 export default function DemoPage() {
   const [cards, setCards] = useState<ScenarioCard[] | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [model, setModel] = useState(loadModel);
 
   useEffect(() => {
     api.scenarios().then(setCards).catch((e: ApiError) => setError(e.message));
-    api.health().then(setHealth).catch(() => setHealth(null));
+    api
+      .models()
+      .then((list) => {
+        setModels(list);
+        // модель, выбранная в прошлый раз, могла пропасть из llm_keys.json
+        if (!list.some((m) => m.id === model)) setModel("local");
+      })
+      .catch(() => setModels([]));
   }, []);
+
+  useEffect(() => {
+    setHealth(null);
+    api.health(model).then(setHealth).catch(() => setHealth(null));
+    try {
+      localStorage.setItem("model", model);
+    } catch {
+      /* без localStorage выбор просто не запомнится */
+    }
+  }, [model]);
+
+  const current = models.find((m) => m.id === model);
 
   return (
     <div className="page">
@@ -27,8 +57,28 @@ export default function DemoPage() {
             уточняет неполные ответы и в конце показывает протокол с цитатами — без баллов.
           </p>
         </div>
-        <HealthBadge health={health} />
+        <div className="model-box">
+          <label className="field">
+            <span>Модель для проверки ответов</span>
+            <select value={model} onChange={(e) => setModel(e.target.value)}>
+              {models.length === 0 && <option value="local">локальная</option>}
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.local ? `Локальная · ${m.model}` : m.id}
+                </option>
+              ))}
+            </select>
+          </label>
+          <HealthBadge health={health} />
+        </div>
       </header>
+
+      {current && !current.local && (
+        <div className="banner banner-warn">
+          Ответы будут отправляться во внешний сервис ({current.provider}). Не вводите личные данные — только
+          учебные ответы.{current.note && ` Внимание: ${current.note}.`}
+        </div>
+      )}
 
       {error && <div className="banner banner-error">{error}</div>}
       {health && !health.ok && (
@@ -39,11 +89,12 @@ export default function DemoPage() {
 
       {!cards && !error && <p className="muted">Загружаю сценарии…</p>}
       <div className="cards">
-        {cards?.map((c) => <ScenarioCardView key={c.id} card={c} />)}
+        {cards?.map((c) => <ScenarioCardView key={c.id} card={c} model={model} />)}
       </div>
 
       <footer className="page-foot muted">
-        Демо: ответы хранятся только в памяти сервера и исчезают после его перезапуска.
+        Демо: сессии хранятся на этом сервере и удаляются через 6 часов без активности. Облачные модели
+        подключаются в файле llm_keys.json (см. README).
       </footer>
     </div>
   );
@@ -59,7 +110,7 @@ function HealthBadge({ health }: { health: Health | null }) {
   );
 }
 
-function ScenarioCardView({ card }: { card: ScenarioCard }) {
+function ScenarioCardView({ card, model }: { card: ScenarioCard; model: string }) {
   const navigate = useNavigate();
   const [topic, setTopic] = useState("");
   const [consent, setConsent] = useState(false);
@@ -75,7 +126,7 @@ function ScenarioCardView({ card }: { card: ScenarioCard }) {
     setBusy(true);
     setError(null);
     try {
-      const s = await api.start({ scenario_id: card.id, topic: topic || undefined });
+      const s = await api.start({ scenario_id: card.id, topic: topic || undefined, model });
       navigate(`/i/${s.token}`);
     } catch (e) {
       setError((e as ApiError).message);

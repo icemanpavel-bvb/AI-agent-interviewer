@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     # Ответ анализа — JSON с цитатой по каждому пункту (до 6): 400 токенов с запасом.
     llm_num_predict: int = 600
     llm_warmup_on_start: bool = True
+    # Облачные модели и ключи к ним (D-013): путь от корня репозитория, файл в .gitignore.
+    llm_keys_file: str = "llm_keys.json"
     gigachat_credentials: str = ""
     llm_mask_pii: bool = False
 

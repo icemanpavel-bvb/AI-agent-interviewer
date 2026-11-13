@@ -72,6 +72,8 @@ export interface Debug {
 
 export interface Session {
   token: string;
+  model: string; // local-модель или имя из llm_keys.json
+  model_local: boolean;
   scenario: { id: string; title: string; kind: Kind; level: string };
   question_number: number;
   total_questions: number;
@@ -79,6 +81,15 @@ export interface Session {
   stopped: boolean;
   messages: Message[];
   debug: Debug | null;
+}
+
+// Модель для проверки ответов (D-013): локальная или облачная из llm_keys.json, без ключа.
+export interface ModelInfo {
+  id: string;
+  provider: string;
+  model: string;
+  local: boolean;
+  note: string;
 }
 
 export interface Health {
